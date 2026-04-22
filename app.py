@@ -20,7 +20,7 @@ RA_VECTOR_STORE_ID = "vs_69e34a1321a88191a9d80166ae6316c7"
 # =====================
 BASE_DIR = os.path.dirname(__file__)
 
-MS_TEMPLATE = os.path.join(BASE_DIR, "Templates", "Method of Statement Template.docx")
+MS_TEMPLATE = os.path.join(BASE_DIR, "Templates", "Method of statement Template.docx")
 RA_TEMPLATE = os.path.join(BASE_DIR, "Templates", "RA Template.docx")
 
 # =====================
