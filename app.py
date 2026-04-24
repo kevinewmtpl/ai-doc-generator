@@ -106,109 +106,105 @@ def replace_all(doc, data):
                             p.text = p.text.replace(k, str(v))
 
 # =====================
-# METHOD STATEMENT
+# KEEP YOUR EXISTING METHOD STATEMENT / RA / LP CODE HERE
+# (no changes)
 # =====================
-if generate_ms:
+
+
+# ======================================================
+# ADD THIS NEW SECTION ONLY (Risk Assessment Pro)
+# ======================================================
+
+st.markdown("---")
+st.subheader("Risk Assessment Pro")
+
+ra_process = st.text_input(
+    "RA Process",
+    "Machinery Moving / Lifting Operation"
+)
+
+activities = st.text_area(
+    "Work Activities (1 per line)",
+    height=200,
+    value="""Transport of lifting machinery into or out of site premises
+Setting up of crane on site
+Lifting operation
+Signalling of load"""
+)
+
+generate_ra_pro = st.button("Generate Risk Assessment Pro")
+
+# -------------------------
+# helper functions
+# -------------------------
+def set_cell_text(cell, text):
+    cell.text = str(text)
+
+def find_ra_table(doc):
+    for table in doc.tables:
+        full = " ".join(
+            c.text for row in table.rows for c in row.cells
+        )
+        if "Work Activity" in full and "Hazard" in full:
+            return table
+    return None
+
+def clear_rows_after_header(table):
+    while len(table.rows) > 1:
+        row = table.rows[1]
+        row._element.getparent().remove(row._element)
+
+def add_row(table, values):
+    row = table.add_row().cells
+    for i, v in enumerate(values):
+        if i < len(row):
+            set_cell_text(row[i], v)
+
+# -------------------------
+# generate RA PRO
+# -------------------------
+if generate_ra_pro:
     try:
-        with st.spinner("Generating Method Statement..."):
+        with st.spinner("Generating Risk Assessment Pro..."):
+
             prompt = f"""
-Create a professional Method Statement for machinery moving and lifting work in Singapore.
+Create professional Singapore style 5x5 Risk Assessment.
 
 Company: {company}
 Project: {project_name}
 Location: {location}
-Description: {description}
+Process: {ra_process}
 Machine: {machine}
+Description: {description}
+Date: {date_input}
 
-Rules:
-- Use formal contractor wording.
-- Return plain text content for each field.
-- Do not return dictionary-looking text.
-- job_scope must be numbered steps.
+Activities:
+{activities}
 
-Return these fields:
-equipment
-safety_aspect
-job_scope
-"""
+Return JSON only.
 
-            response = client.responses.create(
-                model="gpt-5.4",
-                input=prompt,
-                tools=[{
-                    "type": "file_search",
-                    "vector_store_ids": [MS_VECTOR_STORE_ID]
-                }],
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": "ms_schema",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "equipment": {"type": "string"},
-                                "safety_aspect": {"type": "string"},
-                                "job_scope": {"type": "string"}
-                            },
-                            "required": ["equipment", "safety_aspect", "job_scope"]
-                        }
-                    }
-                }
-            )
-
-            data = json.loads(response.output_text)
-
-            doc = Document(MS_TEMPLATE)
-
-            replace_all(doc, {
-                "{{company}}": company,
-                "{{date}}": str(date_input),
-                "{{location}}": location,
-                "{{description_of_work}}": description,
-                "{{machine_spec}}": machine,
-                "{{equipment}}": data["equipment"],
-                "{{safety_aspect}}": data["safety_aspect"],
-                "{{job_scope}}": data["job_scope"],
-                "{{risk_assessment_note}}": "A copy of Risk Assessment will be attached",
-                "{{operation_date}}": str(date_input),
-                "{{operation_time}}": operation_time if operation_time else "To be confirmed",
-                "{{obstacles}}": "To be confirmed",
-                "{{environment}}": "To be confirmed",
-                "{{lifting_crew}}": "To be confirmed",
-                "{{prepared_by}}": "Kevin Wong / Zailani",
-            })
-
-            buffer = BytesIO()
-            doc.save(buffer)
-            buffer.seek(0)
-
-            st.download_button(
-                "Download Method Statement",
-                buffer,
-                "Method_Statement.docx"
-            )
-
-    except Exception as e:
-        st.error("Method Statement generation failed")
-        st.exception(e)
-
-# =====================
-# RISK ASSESSMENT
-# =====================
-if generate_ra:
-    try:
-        with st.spinner("Generating Risk Assessment..."):
-            prompt = f"""
-Create a Risk Assessment for machinery moving work.
-
-Company: {company}
-Location: {location}
-Process: Machinery Moving
-
-Return these fields:
-hazards
-controls
+Schema:
+{{
+ "rows":[
+   {{
+    "ref":"1",
+    "work_activity":"",
+    "hazard":"",
+    "possible_injury":"",
+    "existing_controls":"",
+    "s":"4",
+    "l":"2",
+    "rpn":"8",
+    "additional_controls":"",
+    "rs":"4",
+    "rl":"1",
+    "rrpn":"4",
+    "person":"Supervisor on site",
+    "due_date":"{date_input}",
+    "remark":""
+   }}
+ ]
+}}
 """
 
             response = client.responses.create(
@@ -217,22 +213,7 @@ controls
                 tools=[{
                     "type": "file_search",
                     "vector_store_ids": [RA_VECTOR_STORE_ID]
-                }],
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": "ra_schema",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "hazards": {"type": "string"},
-                                "controls": {"type": "string"}
-                            },
-                            "required": ["hazards", "controls"]
-                        }
-                    }
-                }
+                }]
             )
 
             data = json.loads(response.output_text)
@@ -242,145 +223,44 @@ controls
             replace_all(doc, {
                 "{{company}}": company,
                 "{{location}}": location,
-                "{{process}}": "Machinery Moving",
-                "{{date}}": str(date_input),
-                "{{hazards}}": data["hazards"],
-                "{{controls}}": data["controls"]
+                "{{process}}": ra_process,
+                "{{date}}": str(date_input)
             })
+
+            table = find_ra_table(doc)
+
+            if table:
+                clear_rows_after_header(table)
+
+                for r in data["rows"]:
+                    add_row(table, [
+                        r["ref"],
+                        r["work_activity"],
+                        r["hazard"],
+                        r["possible_injury"],
+                        r["existing_controls"],
+                        r["s"],
+                        r["l"],
+                        r["rpn"],
+                        r["additional_controls"],
+                        r["rs"],
+                        r["rl"],
+                        r["rrpn"],
+                        r["person"],
+                        r["due_date"],
+                        r["remark"]
+                    ])
 
             buffer = BytesIO()
             doc.save(buffer)
             buffer.seek(0)
 
             st.download_button(
-                "Download Risk Assessment",
+                "Download Risk Assessment Pro",
                 buffer,
-                "Risk_Assessment.docx"
+                "Risk_Assessment_Pro.docx"
             )
 
     except Exception as e:
-        st.error("Risk Assessment generation failed")
+        st.error("Risk Assessment Pro generation failed")
         st.exception(e)
-
-# =====================
-# LIFTING PLAN
-# =====================
-if generate_lp:
-    try:
-        with st.spinner("Generating Lifting Plan..."):
-            prompt = f"""
-Improve and professionalize this lifting method for a lifting plan in Singapore.
-
-Company: {company}
-Project: {project_name}
-Location: {location}
-Description: {description}
-Machine: {machine}
-Machine dimension: {machine_dimension}
-Machine weight: {machine_weight}
-Crane name: {crane_name}
-Crane SWL: {crane_swl}
-Crane radius: {crane_radius}
-SWL at radius: {crane_swl_radius}
-
-Sequence of lifting operations:
-{task_sequence}
-
-Generate:
-- lifting_gear
-- lifting_method
-- safety_controls
-
-Rules:
-- Use formal lifting-plan wording
-- Return plain text only
-- No dictionary-looking text
-"""
-
-            response = client.responses.create(
-                model="gpt-5.4",
-                input=prompt,
-                tools=[{
-                    "type": "file_search",
-                    "vector_store_ids": [LP_VECTOR_STORE_ID]
-                }],
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": "lp_schema",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "lifting_gear": {"type": "string"},
-                                "lifting_method": {"type": "string"},
-                                "safety_controls": {"type": "string"}
-                            },
-                            "required": ["lifting_gear", "lifting_method", "safety_controls"]
-                        }
-                    }
-                }
-            )
-
-            data = json.loads(response.output_text)
-
-            doc = Document(LP_TEMPLATE)
-
-            replace_all(doc, {
-                "{{company}}": company,
-                "{{project_name}}": project_name,
-                "{{location}}": location,
-                "{{date}}": str(date_input),
-                "{{operation_date}}": str(date_input),
-                "{{operation_time}}": operation_time,
-                "{{description_of_work}}": description,
-                "{{machine_spec}}": machine,
-                "{{machine_name}}": machine,
-                "{{machine_dimension}}": machine_dimension,
-                "{{machine_weight}}": machine_weight,
-                "{{crane_name}}": crane_name,
-                "{{crane_renew}}": crane_renew,
-                "{{crane_expiry}}": crane_expiry,
-                "{{crane_swl}}": crane_swl,
-                "{{crane_radius}}": crane_radius,
-                "{{crane_swl_radius}}": crane_swl_radius,
-                "{{total_swl_lg}}": total_swl_lg,
-                "{{lg_expiry}}": lg_expiry,
-                "{{lifting_gear}}": data["lifting_gear"],
-                "{{lifting_method}}": data["lifting_method"],
-                "{{safety_controls}}": data["safety_controls"],
-                "{{site_supervisor}}": site_supervisor,
-                "{{lifting_supervisor}}": lifting_supervisor,
-                "{{equipment_operator}}": equipment_operator,
-                "{{rigger_1}}": rigger_1,
-                "{{rigger_2}}": rigger_2,
-                "{{ground_safe}}": "Yes" if ground_safe else "No",
-                "{{outriggers}}": "Yes" if outriggers else "No",
-                "{{obstacles}}": "No" if no_overhead_obstacles else "Yes",
-                "{{lighting}}": "Yes" if lighting else "No",
-                "{{barricade}}": "Yes" if barricade else "No",
-                "{{prepared_by}}": "Kevin Wong / Zailani"
-            })
-
-            buffer = BytesIO()
-            doc.save(buffer)
-            buffer.seek(0)
-
-            st.download_button(
-                "Download Lifting Plan",
-                buffer,
-                "Lifting_Plan.docx"
-            )
-
-    except Exception as e:
-        st.error("Lifting Plan generation failed")
-        st.exception(e)
-
-# =====================
-# RISK ASSESSMENT PRO ADD-ON
-# =====================
-
-st.markdown("---")
-st.subheader("Risk Assessment Pro")
-
-st.info("Paste the full RA Pro block I sent previously here next, below this line.")
