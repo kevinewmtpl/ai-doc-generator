@@ -76,7 +76,7 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown("## Document Generator Dashboard")
+st.markdown("## AI Document Generator Dashboard")
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
