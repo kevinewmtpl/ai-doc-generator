@@ -184,6 +184,32 @@ def add_row(table, values):
             set_cell_text(row[i], v)
 
 
+def merge_same_work_activity_cells(table):
+    header_index = find_ra_column_header_row(table)
+    if header_index is None:
+        return
+
+    start_row = header_index + 1
+    end_row = len(table.rows) - 1
+    current_start = start_row
+
+    while current_start <= end_row:
+        activity = table.rows[current_start].cells[1].text.strip()
+        current_end = current_start
+
+        while (
+            current_end + 1 <= end_row
+            and table.rows[current_end + 1].cells[1].text.strip() == ""
+        ):
+            current_end += 1
+
+        if activity and current_end > current_start:
+            table.rows[current_start].cells[0].merge(table.rows[current_end].cells[0])
+            table.rows[current_start].cells[1].merge(table.rows[current_end].cells[1])
+
+        current_start = current_end + 1
+
+
 # -------------------------
 # Inventory of Work Activities functions
 # -------------------------
@@ -259,6 +285,8 @@ Important:
 - Every generated row must directly match the work activities provided.
 - Do not invent unrelated activities.
 - For each activity, create 1 to 3 relevant hazards.
+- If one activity has more than one hazard, only the first row should contain ref and work_activity.
+- Subsequent hazard rows for the same activity must use empty string for ref and work_activity.
 - Use machinery moving / lifting / forklift / jacking / roller / crating style controls.
 - Use wording style similar to Eric Wong Machinery Transportation Pte Ltd RA examples.
 - Return JSON only.
@@ -332,6 +360,8 @@ Schema:
                         r["due_date"],
                         r["remark"]
                     ])
+
+                merge_same_work_activity_cells(table)
 
             buffer = BytesIO()
             doc.save(buffer)
