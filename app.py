@@ -108,6 +108,33 @@ def replace_all(doc, data):
                             p.text = p.text.replace(k, str(v))
 
 
+def clean_ms_text(text):
+    banned_phrases = [
+        "The above equipment selection",
+        "These safety controls",
+        "The above sequence",
+        "This sequence",
+        "This method statement",
+        "consistent with Eric Wong Machinery Transportation Pte Ltd",
+        "company’s established method statement style",
+        "company's established method statement style",
+        "standard precautions repeatedly stated",
+        "reflect the standard precautions",
+        "follows the company",
+        "previous method statements",
+        "prior method statements",
+    ]
+
+    lines = str(text).splitlines()
+    cleaned = []
+
+    for line in lines:
+        if not any(phrase.lower() in line.lower() for phrase in banned_phrases):
+            cleaned.append(line)
+
+    return "\n".join(cleaned).strip()
+
+
 # =====================
 # METHOD STATEMENT
 # =====================
@@ -128,6 +155,13 @@ Rules:
 - Return plain text content for each field.
 - Do not return dictionary-looking text.
 - job_scope must be numbered steps.
+- Do not include explanation, justification, summary, conclusion, or reference to company format.
+- Do not write sentences starting with "The above", "These safety controls", "This sequence", or "This method statement".
+- Do not mention that the content is consistent with previous company documents.
+- Return only the actual content to be inserted into the Word document.
+- equipment must only list equipment and materials.
+- safety_aspect must only list safety precautions.
+- job_scope must only list work steps.
 
 Return these fields:
 equipment
@@ -161,6 +195,11 @@ job_scope
             )
 
             data = json.loads(response.output_text)
+
+            data["equipment"] = clean_ms_text(data["equipment"])
+            data["safety_aspect"] = clean_ms_text(data["safety_aspect"])
+            data["job_scope"] = clean_ms_text(data["job_scope"])
+
             doc = Document(MS_TEMPLATE)
 
             replace_all(doc, {
@@ -300,6 +339,8 @@ Rules:
 - Use formal lifting-plan wording
 - Return plain text only
 - No dictionary-looking text
+- Do not include explanation, justification, summary, or reference to company format.
+- Return only the actual content to be inserted into the Word document.
 """
 
             response = client.responses.create(
@@ -405,10 +446,6 @@ Signalling of load"""
 generate_ra_pro = st.button("Generate Risk Assessment Pro")
 
 
-# -------------------------
-# RA PRO FONT FUNCTION
-# Times New Roman, Size 10
-# -------------------------
 def set_cell_text(cell, text):
     cell.text = ""
     p = cell.paragraphs[0]
@@ -483,9 +520,6 @@ def merge_same_work_activity_cells(table):
         current_start = current_end + 1
 
 
-# -------------------------
-# Inventory of Work Activities functions
-# -------------------------
 def find_inventory_table(doc):
     for table in doc.tables:
         full = " ".join(c.text for row in table.rows for c in row.cells)
@@ -533,9 +567,6 @@ def fill_inventory_table(doc, activities_text, location, process):
             set_cell_text(row[5], "")
 
 
-# -------------------------
-# GENERATE RA PRO
-# -------------------------
 if generate_ra_pro:
     try:
         with st.spinner("Generating Risk Assessment Pro..."):
