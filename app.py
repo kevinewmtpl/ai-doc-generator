@@ -203,6 +203,23 @@ def set_ra_cell_text(cell, text):
         run.font.size = Pt(10)
 
 
+def format_risk_assessment(doc):
+    for para in doc.paragraphs:
+        for run in para.runs:
+            run.font.name = "Times New Roman"
+            run._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
+            run.font.size = Pt(10)
+
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    for run in para.runs:
+                        run.font.name = "Times New Roman"
+                        run._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
+                        run.font.size = Pt(10)
+
+
 def find_ra_table(doc):
     for table in doc.tables:
         full = " ".join(c.text for row in table.rows for c in row.cells)
@@ -314,9 +331,9 @@ def fill_inventory_table(doc, activities_text, location, process):
 # TABS
 # =====================
 tab_ms, tab_lp, tab_ra = st.tabs([
-    "Method Statement",
-    "Lifting Plan",
-    "Risk Assessment Pro"
+    "📄 Method Statement",
+    "🏗️ Lifting Plan",
+    "⚠️ Risk Assessment Pro"
 ])
 
 # ======================================================
@@ -334,7 +351,7 @@ with tab_ms:
         ms_date_input = st.date_input("Date", value=date.today(), key="ms_date_input")
         ms_operation_time = st.text_input("Operation Date & Time", key="ms_operation_time")
 
-    generate_ms = st.button("Generate Method Statement", key="generate_ms")
+    generate_ms = st.button("📄 Generate Method Statement", key="generate_ms")
 
     if generate_ms:
         try:
@@ -512,7 +529,7 @@ Tag lines""",
             key="task_sequence"
         )
 
-    generate_lp = st.button("Generate Lifting Plan", key="generate_lp")
+    generate_lp = st.button("🏗️ Generate Lifting Plan", key="generate_lp")
 
     if generate_lp:
         try:
@@ -665,7 +682,7 @@ Signalling of load""",
             key="activities"
         )
 
-    generate_ra_pro = st.button("Generate Risk Assessment Pro", key="generate_ra_pro")
+    generate_ra_pro = st.button("⚠️ Generate Risk Assessment Pro", key="generate_ra_pro")
 
     if generate_ra_pro:
         try:
@@ -766,6 +783,8 @@ Schema:
                         ])
 
                     merge_same_work_activity_cells(table)
+
+                format_risk_assessment(doc)
 
                 buffer = BytesIO()
                 doc.save(buffer)
