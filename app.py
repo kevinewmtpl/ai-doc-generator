@@ -463,7 +463,7 @@ with tab_lp:
         lp_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="lp_company")
         lp_project_name = st.text_input("Project Name", key="lp_project_name")
         lp_location = st.text_input("Location of Lifting Operation", key="lp_location")
-        lp_description = st.text_area("Description of Load / Work", key="lp_description")
+        lp_description = st.text_area("Description of Load", key="lp_description")
         lp_machine = st.text_input("Machine Name / Spec", key="lp_machine")
         lp_date_input = st.date_input("Date", value=date.today(), key="lp_date_input")
         lp_operation_time = st.text_input("Operation Time", key="lp_operation_time")
