@@ -108,10 +108,283 @@ def replace_all(doc, data):
                             p.text = p.text.replace(k, str(v))
 
 
+# =====================
+# METHOD STATEMENT
+# =====================
+if generate_ms:
+    try:
+        with st.spinner("Generating Method Statement..."):
+            prompt = f"""
+Create a professional Method Statement for machinery moving and lifting work in Singapore.
+
+Company: {company}
+Project: {project_name}
+Location: {location}
+Description: {description}
+Machine: {machine}
+
+Rules:
+- Use formal contractor wording.
+- Return plain text content for each field.
+- Do not return dictionary-looking text.
+- job_scope must be numbered steps.
+
+Return these fields:
+equipment
+safety_aspect
+job_scope
+"""
+
+            response = client.responses.create(
+                model="gpt-5.4",
+                input=prompt,
+                tools=[{
+                    "type": "file_search",
+                    "vector_store_ids": [MS_VECTOR_STORE_ID]
+                }],
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "ms_schema",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "equipment": {"type": "string"},
+                                "safety_aspect": {"type": "string"},
+                                "job_scope": {"type": "string"}
+                            },
+                            "required": ["equipment", "safety_aspect", "job_scope"]
+                        }
+                    }
+                }
+            )
+
+            data = json.loads(response.output_text)
+            doc = Document(MS_TEMPLATE)
+
+            replace_all(doc, {
+                "{{company}}": company,
+                "{{date}}": str(date_input),
+                "{{location}}": location,
+                "{{description_of_work}}": description,
+                "{{machine_spec}}": machine,
+                "{{equipment}}": data["equipment"],
+                "{{safety_aspect}}": data["safety_aspect"],
+                "{{job_scope}}": data["job_scope"],
+                "{{risk_assessment_note}}": "A copy of Risk Assessment will be attached",
+                "{{operation_date}}": str(date_input),
+                "{{operation_time}}": operation_time if operation_time else "To be confirmed",
+                "{{obstacles}}": "To be confirmed",
+                "{{environment}}": "To be confirmed",
+                "{{lifting_crew}}": "To be confirmed",
+                "{{prepared_by}}": "Kevin Wong / Zailani",
+            })
+
+            buffer = BytesIO()
+            doc.save(buffer)
+            buffer.seek(0)
+
+            st.download_button(
+                "Download Method Statement",
+                buffer,
+                "Method_Statement.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+    except Exception as e:
+        st.error("Method Statement generation failed")
+        st.exception(e)
+
+
+# =====================
+# BASIC RISK ASSESSMENT
+# =====================
+if generate_ra:
+    try:
+        with st.spinner("Generating Risk Assessment..."):
+            prompt = f"""
+Create a Risk Assessment for machinery moving work.
+
+Company: {company}
+Location: {location}
+Process: Machinery Moving
+
+Return these fields:
+hazards
+controls
+"""
+
+            response = client.responses.create(
+                model="gpt-5.4",
+                input=prompt,
+                tools=[{
+                    "type": "file_search",
+                    "vector_store_ids": [RA_VECTOR_STORE_ID]
+                }],
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "ra_schema",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "hazards": {"type": "string"},
+                                "controls": {"type": "string"}
+                            },
+                            "required": ["hazards", "controls"]
+                        }
+                    }
+                }
+            )
+
+            data = json.loads(response.output_text)
+            doc = Document(RA_TEMPLATE)
+
+            replace_all(doc, {
+                "{{company}}": company,
+                "{{location}}": location,
+                "{{process}}": "Machinery Moving",
+                "{{date}}": str(date_input),
+                "{{hazards}}": data["hazards"],
+                "{{controls}}": data["controls"]
+            })
+
+            buffer = BytesIO()
+            doc.save(buffer)
+            buffer.seek(0)
+
+            st.download_button(
+                "Download Risk Assessment",
+                buffer,
+                "Risk_Assessment.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+    except Exception as e:
+        st.error("Risk Assessment generation failed")
+        st.exception(e)
+
+
+# =====================
+# LIFTING PLAN
+# =====================
+if generate_lp:
+    try:
+        with st.spinner("Generating Lifting Plan..."):
+            prompt = f"""
+Improve and professionalize this lifting method for a lifting plan in Singapore.
+
+Company: {company}
+Project: {project_name}
+Location: {location}
+Description: {description}
+Machine: {machine}
+Machine dimension: {machine_dimension}
+Machine weight: {machine_weight}
+Crane name: {crane_name}
+Crane SWL: {crane_swl}
+Crane radius: {crane_radius}
+SWL at radius: {crane_swl_radius}
+
+Sequence of lifting operations:
+{task_sequence}
+
+Generate:
+- lifting_gear
+- lifting_method
+- safety_controls
+
+Rules:
+- Use formal lifting-plan wording
+- Return plain text only
+- No dictionary-looking text
+"""
+
+            response = client.responses.create(
+                model="gpt-5.4",
+                input=prompt,
+                tools=[{
+                    "type": "file_search",
+                    "vector_store_ids": [LP_VECTOR_STORE_ID]
+                }],
+                text={
+                    "format": {
+                        "type": "json_schema",
+                        "name": "lp_schema",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "properties": {
+                                "lifting_gear": {"type": "string"},
+                                "lifting_method": {"type": "string"},
+                                "safety_controls": {"type": "string"}
+                            },
+                            "required": ["lifting_gear", "lifting_method", "safety_controls"]
+                        }
+                    }
+                }
+            )
+
+            data = json.loads(response.output_text)
+            doc = Document(LP_TEMPLATE)
+
+            replace_all(doc, {
+                "{{company}}": company,
+                "{{project_name}}": project_name,
+                "{{location}}": location,
+                "{{date}}": str(date_input),
+                "{{operation_date}}": str(date_input),
+                "{{operation_time}}": operation_time,
+                "{{description_of_work}}": description,
+                "{{machine_spec}}": machine,
+                "{{machine_name}}": machine,
+                "{{machine_dimension}}": machine_dimension,
+                "{{machine_weight}}": machine_weight,
+                "{{crane_name}}": crane_name,
+                "{{crane_renew}}": crane_renew,
+                "{{crane_expiry}}": crane_expiry,
+                "{{crane_swl}}": crane_swl,
+                "{{crane_radius}}": crane_radius,
+                "{{crane_swl_radius}}": crane_swl_radius,
+                "{{total_swl_lg}}": total_swl_lg,
+                "{{lg_expiry}}": lg_expiry,
+                "{{lifting_gear}}": data["lifting_gear"],
+                "{{lifting_method}}": data["lifting_method"],
+                "{{safety_controls}}": data["safety_controls"],
+                "{{site_supervisor}}": site_supervisor,
+                "{{lifting_supervisor}}": lifting_supervisor,
+                "{{equipment_operator}}": equipment_operator,
+                "{{rigger_1}}": rigger_1,
+                "{{rigger_2}}": rigger_2,
+                "{{ground_safe}}": "Yes" if ground_safe else "No",
+                "{{outriggers}}": "Yes" if outriggers else "No",
+                "{{obstacles}}": "No" if no_overhead_obstacles else "Yes",
+                "{{lighting}}": "Yes" if lighting else "No",
+                "{{barricade}}": "Yes" if barricade else "No",
+                "{{prepared_by}}": "Kevin Wong / Zailani"
+            })
+
+            buffer = BytesIO()
+            doc.save(buffer)
+            buffer.seek(0)
+
+            st.download_button(
+                "Download Lifting Plan",
+                buffer,
+                "Lifting_Plan.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+    except Exception as e:
+        st.error("Lifting Plan generation failed")
+        st.exception(e)
+
+
 # ======================================================
 # RISK ASSESSMENT PRO
 # ======================================================
-
 st.markdown("---")
 st.subheader("Risk Assessment Pro")
 
@@ -370,7 +643,8 @@ Schema:
             st.download_button(
                 "Download Risk Assessment Pro",
                 buffer,
-                "Risk_Assessment_Pro.docx"
+                "Risk_Assessment_Pro.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
             )
 
     except Exception as e:
