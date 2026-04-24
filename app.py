@@ -6,6 +6,8 @@ from datetime import date
 import streamlit as st
 from openai import OpenAI
 from docx import Document
+from docx.shared import Pt
+from docx.oxml.ns import qn
 
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
@@ -131,15 +133,21 @@ generate_ra_pro = st.button("Generate Risk Assessment Pro")
 
 
 # -------------------------
-# helper functions - FIXED
+# RA PRO FONT FUNCTION
+# Times New Roman, Size 10
 # -------------------------
 def set_cell_text(cell, text):
     cell.text = ""
     p = cell.paragraphs[0]
+
     for i, line in enumerate(str(text).split("\n")):
         if i > 0:
             p.add_run().add_break()
-        p.add_run(line)
+
+        run = p.add_run(line)
+        run.font.name = "Times New Roman"
+        run._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
+        run.font.size = Pt(10)
 
 
 def find_ra_table(doc):
@@ -299,10 +307,8 @@ Schema:
                 "{{date}}": str(date_input)
             })
 
-            # Fill first page Inventory of Work Activities
             fill_inventory_table(doc, activities, location, ra_process)
 
-            # Fill Risk Assessment table
             table = find_ra_table(doc)
 
             if table:
