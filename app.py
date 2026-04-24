@@ -10,29 +10,40 @@ from docx.shared import Pt
 from docx.oxml.ns import qn
 
 # =====================
-# PAGE CONFIG + STYLE
+# PAGE CONFIG
 # =====================
 st.set_page_config(
-    page_title="EWMT Document Generator",
+    page_title="EWMT AI Document System",
     page_icon="🏗️",
     layout="wide"
 )
 
+# =====================
+# PREMIUM UI STYLE
+# =====================
 st.markdown("""
 <style>
 .block-container {
-    padding-top: 1.5rem;
+    padding-top: 1.2rem;
     padding-bottom: 2rem;
-    max-width: 1400px;
+    max-width: 1500px;
+}
+
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0f172a, #1e293b);
+}
+
+[data-testid="stSidebar"] * {
+    color: white;
 }
 
 .ewmt-header {
     background: linear-gradient(90deg, #0f172a, #1e3a8a);
-    padding: 24px 30px;
-    border-radius: 18px;
+    padding: 26px 32px;
+    border-radius: 20px;
     color: white;
-    margin-bottom: 25px;
-    box-shadow: 0px 4px 14px rgba(0,0,0,0.18);
+    margin-bottom: 22px;
+    box-shadow: 0px 6px 18px rgba(15,23,42,0.22);
 }
 
 .ewmt-title {
@@ -46,11 +57,38 @@ st.markdown("""
     color: #dbeafe;
 }
 
+.dashboard-card {
+    background: white;
+    padding: 22px;
+    border-radius: 18px;
+    border: 1px solid #e5e7eb;
+    box-shadow: 0px 4px 14px rgba(15,23,42,0.08);
+    min-height: 145px;
+}
+
+.dashboard-card h3 {
+    margin-top: 0;
+    color: #0f172a;
+}
+
+.dashboard-card p {
+    color: #475569;
+}
+
+.section-title {
+    background: #f1f5f9;
+    padding: 12px 16px;
+    border-left: 5px solid #1e3a8a;
+    border-radius: 10px;
+    font-weight: 700;
+    margin-bottom: 12px;
+}
+
 .stButton > button {
     background-color: #1e3a8a;
     color: white;
     border-radius: 10px;
-    padding: 0.6rem 1.2rem;
+    padding: 0.65rem 1.25rem;
     font-weight: 700;
     border: none;
 }
@@ -60,24 +98,42 @@ st.markdown("""
     color: white;
 }
 
-[data-testid="stTabs"] button {
-    font-size: 16px;
+.stDownloadButton > button {
+    background-color: #047857;
+    color: white;
+    border-radius: 10px;
+    padding: 0.65rem 1.25rem;
     font-weight: 700;
+    border: none;
+}
+
+.stDownloadButton > button:hover {
+    background-color: #065f46;
+    color: white;
+}
+
+div[data-testid="stExpander"] {
+    border-radius: 12px;
+    border: 1px solid #e5e7eb;
 }
 </style>
 """, unsafe_allow_html=True)
 
+# =====================
+# HEADER
+# =====================
 st.markdown("""
 <div class="ewmt-header">
     <div class="ewmt-title">Eric Wong Machinery Transportation Pte Ltd</div>
     <div class="ewmt-subtitle">
-        Heavy Machinery Moving • Lifting • Transportation • AI Document Generator
+        Heavy Machinery Moving • Lifting • Transportation • AI Document Control System
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-st.markdown("## AI Document Generator Dashboard")
-
+# =====================
+# OPENAI CLIENT
+# =====================
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # =====================
@@ -328,28 +384,105 @@ def fill_inventory_table(doc, activities_text, location, process):
 
 
 # =====================
-# TABS
+# SIDEBAR NAVIGATION
 # =====================
-tab_ms, tab_lp, tab_ra = st.tabs([
-    "📄 Method Statement",
-    "🏗️ Lifting Plan",
-    "⚠️ Risk Assessment Pro"
-])
+with st.sidebar:
+    st.markdown("## EWMT System")
+    st.markdown("AI Document Control")
+    st.markdown("---")
+
+    page = st.radio(
+        "Navigation",
+        [
+            "🏠 Dashboard",
+            "📄 Method Statement",
+            "🏗️ Lifting Plan",
+            "⚠️ Risk Assessment Pro",
+            "🧰 Lifting Gear Register",
+            "⏰ Expiry Alerts",
+            "⚙️ Settings"
+        ]
+    )
+
+    st.markdown("---")
+    st.caption("Internal system for document preparation and lifting operation records.")
 
 # ======================================================
-# TAB 1 - METHOD STATEMENT
+# DASHBOARD
 # ======================================================
-with tab_ms:
-    st.header("Method Statement")
+if page == "🏠 Dashboard":
+    st.markdown("## EWMT AI Document Control Dashboard")
+    st.caption("Select a module from the sidebar to generate professional project documents.")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.markdown("""
+        <div class="dashboard-card">
+            <h3>📄 Method Statement</h3>
+            <p>Create professional method statements for machinery moving and lifting work.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col2:
+        st.markdown("""
+        <div class="dashboard-card">
+            <h3>🏗️ Lifting Plan</h3>
+            <p>Generate lifting plan / permit-to-work documents based on site and crane details.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col3:
+        st.markdown("""
+        <div class="dashboard-card">
+            <h3>⚠️ Risk Assessment Pro</h3>
+            <p>Create structured 5x5 risk assessments based on actual work activities.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("### Coming Modules")
+    col4, col5, col6 = st.columns(3)
+
+    with col4:
+        st.markdown("""
+        <div class="dashboard-card">
+            <h3>🧰 Lifting Gear Register</h3>
+            <p>Manage shackles, slings, wire ropes, certificates and expiry dates.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col5:
+        st.markdown("""
+        <div class="dashboard-card">
+            <h3>⏰ Expiry Alerts</h3>
+            <p>Check expired and expiring lifting gear certificates.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with col6:
+        st.markdown("""
+        <div class="dashboard-card">
+            <h3>⚙️ Settings</h3>
+            <p>Manage templates, prepared by names and default company details.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+
+# ======================================================
+# METHOD STATEMENT
+# ======================================================
+if page == "📄 Method Statement":
+    st.markdown("## 📄 Method Statement")
+    st.caption("Fill in the work details and generate a Word method statement.")
 
     with st.expander("Project Details", expanded=True):
         ms_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ms_company")
+        ms_project_name = st.text_input("Project Name", key="ms_project_name")
         ms_date_input = st.date_input("Date", value=date.today(), key="ms_date_input")
         ms_description = st.text_area("Description of Work", key="ms_description")
         ms_machine = st.text_input("Machine Model, Dimension and Weight", key="ms_machine")
         ms_operation_time = st.text_input("Operation Date & Time", key="ms_operation_time")
         ms_location = st.text_input("Location of Operation", key="ms_location")
-        
 
     generate_ms = st.button("📄 Generate Method Statement", key="generate_ms")
 
@@ -454,25 +587,26 @@ job_scope
 
 
 # ======================================================
-# TAB 2 - LIFTING PLAN
+# LIFTING PLAN
 # ======================================================
-with tab_lp:
-    st.header("Lifting Plan")
+if page == "🏗️ Lifting Plan":
+    st.markdown("## 🏗️ Lifting Plan / Permit to Work")
+    st.caption("Fill in the lifting details according to your lifting plan template.")
 
-    with st.expander("Project Details", expanded=True):
+    with st.expander("1. General", expanded=True):
         lp_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="lp_company")
-        lp_project_name = st.text_input("Project Name", key="lp_project_name")
+        lp_project_name = st.text_input("Project", key="lp_project_name")
         lp_location = st.text_input("Location of Lifting Operation", key="lp_location")
-        lp_description = st.text_area("Description of Load", key="lp_description")
-        lp_machine = st.text_input("Machine Name / Spec", key="lp_machine")
         lp_date_input = st.date_input("Date", value=date.today(), key="lp_date_input")
         lp_operation_time = st.text_input("Operation Time", key="lp_operation_time")
 
-    with st.expander("Load Details", expanded=True):
-        lp_machine_dimension = st.text_input("Machine Dimension", key="lp_machine_dimension")
-        lp_machine_weight = st.text_input("Machine Weight", key="lp_machine_weight")
+    with st.expander("2. Details of Loads to be Hoist", expanded=True):
+        lp_description = st.text_area("Description of Load", key="lp_description")
+        lp_machine = st.text_input("Machine Name / Spec", key="lp_machine")
+        lp_machine_dimension = st.text_input("Overall Dimension of Load", key="lp_machine_dimension")
+        lp_machine_weight = st.text_input("Weight of Load", key="lp_machine_weight")
 
-    with st.expander("Lifting Equipment Details", expanded=True):
+    with st.expander("3. Details of Lifting Equipment", expanded=True):
         lifting_equipment_type = st.selectbox(
             "Type of Lifting Equipment",
             ["Mobile crane", "Lorry loader"],
@@ -489,33 +623,34 @@ Tag lines""",
             key="lifting_gear_manual"
         )
 
-        crane_name = st.text_input("Crane Name / Model", key="crane_name")
-        crane_renew = st.text_input("Crane Cert Date", key="crane_renew")
-        crane_expiry = st.text_input("Crane Cert Expiry", key="crane_expiry")
-        crane_swl = st.text_input("Crane SWL", key="crane_swl")
-        crane_radius = st.text_input("Crane Radius", key="crane_radius")
-        crane_swl_radius = st.text_input("SWL at Radius", key="crane_swl_radius")
-        total_swl_lg = st.text_input("Total SWL of Lifting Gear", key="total_swl_lg")
-        lg_expiry = st.text_input("Lifting Gear Expiry", key="lg_expiry")
+        crane_name = st.text_input("LM / LE Registration No. / Crane Name", key="crane_name")
+        crane_renew = st.text_input("Date of Last Certification", key="crane_renew")
+        crane_expiry = st.text_input("Expiry Date of Certificate", key="crane_expiry")
+        crane_swl = st.text_input("Max Safe Working Load", key="crane_swl")
+        crane_radius = st.text_input("Intended Load Radius", key="crane_radius")
+        crane_swl_radius = st.text_input("SWL at This Radius", key="crane_swl_radius")
+        total_swl_lg = st.text_input("SWL of Lifting Gear", key="total_swl_lg")
+        lg_weight = st.text_input("Combined Weight of Lifting Gears", key="lg_weight")
+        lg_expiry = st.text_input("Expiry Date of Lifting Gear Certificate", key="lg_expiry")
 
-    with st.expander("Personnel", expanded=True):
+    with st.expander("4. Personnel Involved", expanded=True):
         site_supervisor = st.text_input("Site Supervisor", key="site_supervisor")
         lifting_supervisor = st.text_input("Lifting Supervisor", key="lifting_supervisor")
-        equipment_operator = st.text_input("Equipment Operator", key="equipment_operator")
-        rigger_1 = st.text_input("Rigger 1", key="rigger_1")
-        rigger_2 = st.text_input("Rigger 2", key="rigger_2")
+        equipment_operator = st.text_input("Lifting Equipment Operator", key="equipment_operator")
+        rigger_1 = st.text_input("Rigger / Signalman 1", key="rigger_1")
+        rigger_2 = st.text_input("Rigger / Signalman 2", key="rigger_2")
 
-    with st.expander("Site Conditions", expanded=True):
+    with st.expander("5. Physical and Environmental Considerations", expanded=True):
         ground_safe = st.checkbox("Ground Safe", value=True, key="ground_safe")
         outriggers = st.checkbox("Outriggers Extended", value=True, key="outriggers")
         no_overhead_obstacles = st.checkbox("No Overhead Obstacles", value=True, key="no_overhead_obstacles")
         lighting = st.checkbox("Lighting Adequate", value=True, key="lighting")
         barricade = st.checkbox("Area Barricaded", value=True, key="barricade")
 
-    with st.expander("Lifting Steps", expanded=True):
+    with st.expander("6. Tasks", expanded=True):
         task_sequence = st.text_area(
-            "Lifting Steps",
-            height=200,
+            "Sequence of Lifting Operations",
+            height=220,
             value="""1. Deploy crane / lorry loader at designated unloading area
 2. Set up outriggers fully extended and rest on timber mats / steel plates
 3. Carry out rigging and hook-on
@@ -614,6 +749,7 @@ Rules:
                     "{{crane_radius}}": crane_radius,
                     "{{crane_swl_radius}}": crane_swl_radius,
                     "{{total_swl_lg}}": total_swl_lg,
+                    "{{lg_weight}}": lg_weight,
                     "{{lg_expiry}}": lg_expiry,
                     "{{lifting_gear}}": lifting_gear_manual,
                     "{{lifting_method}}": data["lifting_method"],
@@ -650,10 +786,11 @@ Rules:
 
 
 # ======================================================
-# TAB 3 - RISK ASSESSMENT PRO
+# RISK ASSESSMENT PRO
 # ======================================================
-with tab_ra:
-    st.header("Risk Assessment Pro")
+if page == "⚠️ Risk Assessment Pro":
+    st.markdown("## ⚠️ Risk Assessment Pro")
+    st.caption("Generate a professional 5x5 Risk Assessment based on actual work activities.")
 
     with st.expander("Project Details", expanded=True):
         ra_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ra_company")
@@ -672,7 +809,7 @@ with tab_ra:
 
         activities = st.text_area(
             "Work Activities (1 per line)",
-            height=200,
+            height=220,
             value="""Transport of lifting machinery into or out of site premises
 Setting up of crane on site
 Lifting operation
@@ -798,3 +935,19 @@ Schema:
         except Exception as e:
             st.error("Risk Assessment Pro generation failed")
             st.exception(e)
+
+
+# ======================================================
+# PLACEHOLDER MODULES
+# ======================================================
+if page == "🧰 Lifting Gear Register":
+    st.markdown("## 🧰 Lifting Gear Register")
+    st.info("This module can be added next: upload certificates, track SWL, serial number and expiry dates.")
+
+if page == "⏰ Expiry Alerts":
+    st.markdown("## ⏰ Expiry Alerts")
+    st.info("This module can be added next: show expired and expiring lifting gear certificates.")
+
+if page == "⚙️ Settings":
+    st.markdown("## ⚙️ Settings")
+    st.info("This module can be added next: manage default names, templates and company settings.")
