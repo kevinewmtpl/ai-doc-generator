@@ -375,3 +375,12 @@ Rules:
     except Exception as e:
         st.error("Lifting Plan generation failed")
         st.exception(e)
+
+# =====================
+# RISK ASSESSMENT PRO ADD-ON
+# =====================
+
+st.markdown("---")
+st.subheader("Risk Assessment Pro")
+
+st.info("Paste the full RA Pro block I sent previously here next, below this line.")
