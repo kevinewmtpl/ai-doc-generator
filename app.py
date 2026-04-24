@@ -135,6 +135,23 @@ def clean_ms_text(text):
     return "\n".join(cleaned).strip()
 
 
+def format_method_statement(doc):
+    for para in doc.paragraphs:
+        for run in para.runs:
+            run.font.name = "Times New Roman"
+            run._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
+            run.font.size = Pt(12)
+
+    for table in doc.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for para in cell.paragraphs:
+                    for run in para.runs:
+                        run.font.name = "Times New Roman"
+                        run._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
+                        run.font.size = Pt(12)
+
+
 # =====================
 # METHOD STATEMENT
 # =====================
@@ -219,6 +236,8 @@ job_scope
                 "{{lifting_crew}}": "To be confirmed",
                 "{{prepared_by}}": "Kevin Wong / Zailani",
             })
+
+            format_method_statement(doc)
 
             buffer = BytesIO()
             doc.save(buffer)
