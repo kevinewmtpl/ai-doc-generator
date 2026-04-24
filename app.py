@@ -344,12 +344,12 @@ with tab_ms:
 
     with st.expander("Project Details", expanded=True):
         ms_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ms_company")
-        ms_project_name = st.text_input("Project Name", key="ms_project_name")
-        ms_location = st.text_input("Location of Operation", key="ms_location")
-        ms_description = st.text_area("Description of Work", key="ms_description")
-        ms_machine = st.text_input("Machine Spec", key="ms_machine")
         ms_date_input = st.date_input("Date", value=date.today(), key="ms_date_input")
+        ms_description = st.text_area("Description of Work", key="ms_description")
+        ms_machine = st.text_input("Machine Model, Dimension and Weight", key="ms_machine")
         ms_operation_time = st.text_input("Operation Date & Time", key="ms_operation_time")
+        ms_location = st.text_input("Location of Operation", key="ms_location")
+        
 
     generate_ms = st.button("📄 Generate Method Statement", key="generate_ms")
 
