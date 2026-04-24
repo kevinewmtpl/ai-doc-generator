@@ -9,6 +9,75 @@ from docx import Document
 from docx.shared import Pt
 from docx.oxml.ns import qn
 
+# =====================
+# PAGE CONFIG + STYLE
+# =====================
+st.set_page_config(
+    page_title="EWMT Document Generator",
+    page_icon="🏗️",
+    layout="wide"
+)
+
+st.markdown("""
+<style>
+.block-container {
+    padding-top: 1.5rem;
+    padding-bottom: 2rem;
+    max-width: 1400px;
+}
+
+.ewmt-header {
+    background: linear-gradient(90deg, #0f172a, #1e3a8a);
+    padding: 24px 30px;
+    border-radius: 18px;
+    color: white;
+    margin-bottom: 25px;
+    box-shadow: 0px 4px 14px rgba(0,0,0,0.18);
+}
+
+.ewmt-title {
+    font-size: 34px;
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+
+.ewmt-subtitle {
+    font-size: 17px;
+    color: #dbeafe;
+}
+
+.stButton > button {
+    background-color: #1e3a8a;
+    color: white;
+    border-radius: 10px;
+    padding: 0.6rem 1.2rem;
+    font-weight: 700;
+    border: none;
+}
+
+.stButton > button:hover {
+    background-color: #0f172a;
+    color: white;
+}
+
+[data-testid="stTabs"] button {
+    font-size: 16px;
+    font-weight: 700;
+}
+</style>
+""", unsafe_allow_html=True)
+
+st.markdown("""
+<div class="ewmt-header">
+    <div class="ewmt-title">Eric Wong Machinery Transportation Pte Ltd</div>
+    <div class="ewmt-subtitle">
+        Heavy Machinery Moving • Lifting • Transportation • AI Document Generator
+    </div>
+</div>
+""", unsafe_allow_html=True)
+
+st.markdown("## Document Generator Dashboard")
+
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # =====================
@@ -242,10 +311,8 @@ def fill_inventory_table(doc, activities_text, location, process):
 
 
 # =====================
-# APP UI
+# TABS
 # =====================
-st.title("Document Generator")
-
 tab_ms, tab_lp, tab_ra = st.tabs([
     "Method Statement",
     "Lifting Plan",
@@ -258,13 +325,14 @@ tab_ms, tab_lp, tab_ra = st.tabs([
 with tab_ms:
     st.header("Method Statement")
 
-    ms_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ms_company")
-    ms_project_name = st.text_input("Project Name", key="ms_project_name")
-    ms_location = st.text_input("Location of Operation", key="ms_location")
-    ms_description = st.text_area("Description of Work", key="ms_description")
-    ms_machine = st.text_input("Machine Spec", key="ms_machine")
-    ms_date_input = st.date_input("Date", value=date.today(), key="ms_date_input")
-    ms_operation_time = st.text_input("Operation Date & Time", key="ms_operation_time")
+    with st.expander("Project Details", expanded=True):
+        ms_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ms_company")
+        ms_project_name = st.text_input("Project Name", key="ms_project_name")
+        ms_location = st.text_input("Location of Operation", key="ms_location")
+        ms_description = st.text_area("Description of Work", key="ms_description")
+        ms_machine = st.text_input("Machine Spec", key="ms_machine")
+        ms_date_input = st.date_input("Date", value=date.today(), key="ms_date_input")
+        ms_operation_time = st.text_input("Operation Date & Time", key="ms_operation_time")
 
     generate_ms = st.button("Generate Method Statement", key="generate_ms")
 
@@ -374,67 +442,66 @@ job_scope
 with tab_lp:
     st.header("Lifting Plan")
 
-    lp_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="lp_company")
-    lp_project_name = st.text_input("Project Name", key="lp_project_name")
-    lp_location = st.text_input("Location of Lifting Operation", key="lp_location")
-    lp_description = st.text_area("Description of Load / Work", key="lp_description")
-    lp_machine = st.text_input("Machine Name / Spec", key="lp_machine")
-    lp_date_input = st.date_input("Date", value=date.today(), key="lp_date_input")
-    lp_operation_time = st.text_input("Operation Time", key="lp_operation_time")
+    with st.expander("Project Details", expanded=True):
+        lp_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="lp_company")
+        lp_project_name = st.text_input("Project Name", key="lp_project_name")
+        lp_location = st.text_input("Location of Lifting Operation", key="lp_location")
+        lp_description = st.text_area("Description of Load / Work", key="lp_description")
+        lp_machine = st.text_input("Machine Name / Spec", key="lp_machine")
+        lp_date_input = st.date_input("Date", value=date.today(), key="lp_date_input")
+        lp_operation_time = st.text_input("Operation Time", key="lp_operation_time")
 
-    st.subheader("Load Details")
-    lp_machine_dimension = st.text_input("Machine Dimension", key="lp_machine_dimension")
-    lp_machine_weight = st.text_input("Machine Weight", key="lp_machine_weight")
+    with st.expander("Load Details", expanded=True):
+        lp_machine_dimension = st.text_input("Machine Dimension", key="lp_machine_dimension")
+        lp_machine_weight = st.text_input("Machine Weight", key="lp_machine_weight")
 
-    st.subheader("Lifting Equipment Details")
+    with st.expander("Lifting Equipment Details", expanded=True):
+        lifting_equipment_type = st.selectbox(
+            "Type of Lifting Equipment",
+            ["Mobile crane", "Lorry loader"],
+            key="lifting_equipment_type"
+        )
 
-    lifting_equipment_type = st.selectbox(
-        "Type of Lifting Equipment",
-        ["Mobile crane", "Lorry loader"],
-        key="lifting_equipment_type"
-    )
-
-    lifting_gear_manual = st.text_area(
-        "Type of Lifting Gears / Equipment Details",
-        height=160,
-        value="""Mobile crane of suitable capacity
+        lifting_gear_manual = st.text_area(
+            "Type of Lifting Gears / Equipment Details",
+            height=160,
+            value="""Mobile crane of suitable capacity
 Wire rope slings / webbing slings
 Shackles
 Spreader beam if required
 Timber mats / steel plates
 Tag lines""",
-        key="lifting_gear_manual"
-    )
+            key="lifting_gear_manual"
+        )
 
-    crane_name = st.text_input("Crane Name / Model", key="crane_name")
-    crane_renew = st.text_input("Crane Cert Date", key="crane_renew")
-    crane_expiry = st.text_input("Crane Cert Expiry", key="crane_expiry")
+        crane_name = st.text_input("Crane Name / Model", key="crane_name")
+        crane_renew = st.text_input("Crane Cert Date", key="crane_renew")
+        crane_expiry = st.text_input("Crane Cert Expiry", key="crane_expiry")
+        crane_swl = st.text_input("Crane SWL", key="crane_swl")
+        crane_radius = st.text_input("Crane Radius", key="crane_radius")
+        crane_swl_radius = st.text_input("SWL at Radius", key="crane_swl_radius")
+        total_swl_lg = st.text_input("Total SWL of Lifting Gear", key="total_swl_lg")
+        lg_expiry = st.text_input("Lifting Gear Expiry", key="lg_expiry")
 
-    crane_swl = st.text_input("Crane SWL", key="crane_swl")
-    crane_radius = st.text_input("Crane Radius", key="crane_radius")
-    crane_swl_radius = st.text_input("SWL at Radius", key="crane_swl_radius")
+    with st.expander("Personnel", expanded=True):
+        site_supervisor = st.text_input("Site Supervisor", key="site_supervisor")
+        lifting_supervisor = st.text_input("Lifting Supervisor", key="lifting_supervisor")
+        equipment_operator = st.text_input("Equipment Operator", key="equipment_operator")
+        rigger_1 = st.text_input("Rigger 1", key="rigger_1")
+        rigger_2 = st.text_input("Rigger 2", key="rigger_2")
 
-    total_swl_lg = st.text_input("Total SWL of Lifting Gear", key="total_swl_lg")
-    lg_expiry = st.text_input("Lifting Gear Expiry", key="lg_expiry")
+    with st.expander("Site Conditions", expanded=True):
+        ground_safe = st.checkbox("Ground Safe", value=True, key="ground_safe")
+        outriggers = st.checkbox("Outriggers Extended", value=True, key="outriggers")
+        no_overhead_obstacles = st.checkbox("No Overhead Obstacles", value=True, key="no_overhead_obstacles")
+        lighting = st.checkbox("Lighting Adequate", value=True, key="lighting")
+        barricade = st.checkbox("Area Barricaded", value=True, key="barricade")
 
-    st.subheader("Personnel")
-    site_supervisor = st.text_input("Site Supervisor", key="site_supervisor")
-    lifting_supervisor = st.text_input("Lifting Supervisor", key="lifting_supervisor")
-    equipment_operator = st.text_input("Equipment Operator", key="equipment_operator")
-    rigger_1 = st.text_input("Rigger 1", key="rigger_1")
-    rigger_2 = st.text_input("Rigger 2", key="rigger_2")
-
-    st.subheader("Conditions")
-    ground_safe = st.checkbox("Ground Safe", value=True, key="ground_safe")
-    outriggers = st.checkbox("Outriggers Extended", value=True, key="outriggers")
-    no_overhead_obstacles = st.checkbox("No Overhead Obstacles", value=True, key="no_overhead_obstacles")
-    lighting = st.checkbox("Lighting Adequate", value=True, key="lighting")
-    barricade = st.checkbox("Area Barricaded", value=True, key="barricade")
-
-    task_sequence = st.text_area(
-        "Lifting Steps",
-        height=200,
-        value="""1. Deploy crane / lorry loader at designated unloading area
+    with st.expander("Lifting Steps", expanded=True):
+        task_sequence = st.text_area(
+            "Lifting Steps",
+            height=200,
+            value="""1. Deploy crane / lorry loader at designated unloading area
 2. Set up outriggers fully extended and rest on timber mats / steel plates
 3. Carry out rigging and hook-on
 4. Conduct trial lift
@@ -442,8 +509,8 @@ Tag lines""",
 6. Shift load to designated position
 7. Lower load in a controlled manner
 8. Remove lifting gear and carry out housekeeping""",
-        key="task_sequence"
-    )
+            key="task_sequence"
+        )
 
     generate_lp = st.button("Generate Lifting Plan", key="generate_lp")
 
@@ -573,28 +640,30 @@ Rules:
 with tab_ra:
     st.header("Risk Assessment Pro")
 
-    ra_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ra_company")
-    ra_project_name = st.text_input("Project Name", key="ra_project_name")
-    ra_location = st.text_input("Location", key="ra_location")
-    ra_machine = st.text_input("Machine Spec", key="ra_machine")
-    ra_description = st.text_area("Description of Work", key="ra_description")
-    ra_date_input = st.date_input("Date", value=date.today(), key="ra_date_input")
+    with st.expander("Project Details", expanded=True):
+        ra_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ra_company")
+        ra_project_name = st.text_input("Project Name", key="ra_project_name")
+        ra_location = st.text_input("Location", key="ra_location")
+        ra_machine = st.text_input("Machine Spec", key="ra_machine")
+        ra_description = st.text_area("Description of Work", key="ra_description")
+        ra_date_input = st.date_input("Date", value=date.today(), key="ra_date_input")
 
-    ra_process = st.text_input(
-        "RA Process",
-        "Machinery Moving / Lifting Operation",
-        key="ra_process"
-    )
+    with st.expander("Risk Assessment Details", expanded=True):
+        ra_process = st.text_input(
+            "RA Process",
+            "Machinery Moving / Lifting Operation",
+            key="ra_process"
+        )
 
-    activities = st.text_area(
-        "Work Activities (1 per line)",
-        height=200,
-        value="""Transport of lifting machinery into or out of site premises
+        activities = st.text_area(
+            "Work Activities (1 per line)",
+            height=200,
+            value="""Transport of lifting machinery into or out of site premises
 Setting up of crane on site
 Lifting operation
 Signalling of load""",
-        key="activities"
-    )
+            key="activities"
+        )
 
     generate_ra_pro = st.button("Generate Risk Assessment Pro", key="generate_ra_pro")
 
