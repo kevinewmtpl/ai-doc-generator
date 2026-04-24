@@ -105,14 +105,8 @@ def replace_all(doc, data):
                         if k in p.text:
                             p.text = p.text.replace(k, str(v))
 
-# =====================
-# KEEP YOUR EXISTING METHOD STATEMENT / RA / LP CODE HERE
-# (no changes)
-# =====================
-
-
 # ======================================================
-# ADD THIS NEW SECTION ONLY (Risk Assessment Pro)
+# RISK ASSESSMENT PRO
 # ======================================================
 
 st.markdown("---")
@@ -135,24 +129,43 @@ Signalling of load"""
 generate_ra_pro = st.button("Generate Risk Assessment Pro")
 
 # -------------------------
-# helper functions
+# helper functions - FIXED
 # -------------------------
 def set_cell_text(cell, text):
-    cell.text = str(text)
+    cell.text = ""
+    p = cell.paragraphs[0]
+    for i, line in enumerate(str(text).split("\n")):
+        if i > 0:
+            p.add_run().add_break()
+        p.add_run(line)
+
 
 def find_ra_table(doc):
     for table in doc.tables:
-        full = " ".join(
-            c.text for row in table.rows for c in row.cells
-        )
-        if "Work Activity" in full and "Hazard" in full:
+        full = " ".join(c.text for row in table.rows for c in row.cells)
+        if "Hazard Identification" in full and "Risk Evaluation" in full and "Risk Control" in full:
             return table
     return None
 
-def clear_rows_after_header(table):
-    while len(table.rows) > 1:
-        row = table.rows[1]
+
+def find_ra_column_header_row(table):
+    for i, row in enumerate(table.rows):
+        texts = [cell.text.strip() for cell in row.cells]
+        if "Ref" in texts and "Work Activity" in texts and "Hazard" in texts:
+            return i
+    return None
+
+
+def clear_rows_after_column_header(table):
+    header_index = find_ra_column_header_row(table)
+
+    if header_index is None:
+        raise Exception("Cannot find RA column header row")
+
+    while len(table.rows) > header_index + 1:
+        row = table.rows[header_index + 1]
         row._element.getparent().remove(row._element)
+
 
 def add_row(table, values):
     row = table.add_row().cells
@@ -161,7 +174,7 @@ def add_row(table, values):
             set_cell_text(row[i], v)
 
 # -------------------------
-# generate RA PRO
+# GENERATE RA PRO
 # -------------------------
 if generate_ra_pro:
     try:
@@ -230,7 +243,7 @@ Schema:
             table = find_ra_table(doc)
 
             if table:
-                clear_rows_after_header(table)
+                clear_rows_after_column_header(table)
 
                 for r in data["rows"]:
                     add_row(table, [
