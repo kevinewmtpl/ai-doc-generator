@@ -28,85 +28,6 @@ RA_TEMPLATE = os.path.join(BASE_DIR, "Templates", "RA Template.docx")
 LP_TEMPLATE = os.path.join(BASE_DIR, "Templates", "Lifting Plan Template.docx")
 
 # =====================
-# UI
-# =====================
-st.title("Document Generator")
-
-company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd")
-project_name = st.text_input("Project Name")
-location = st.text_input("Location")
-description = st.text_area("Description of Work")
-machine = st.text_input("Machine Spec")
-date_input = st.date_input("Date", value=date.today())
-
-st.subheader("Lifting Plan Details")
-
-operation_time = st.text_input("Operation Time")
-machine_dimension = st.text_input("Machine Dimension")
-machine_weight = st.text_input("Machine Weight")
-
-lifting_equipment_type = st.selectbox(
-    "Type of Lifting Equipment",
-    ["Mobile crane", "Lorry loader"]
-)
-
-lifting_gear_manual = st.text_area(
-    "Type of Lifting Gears / Equipment Details",
-    height=160,
-    value="""Mobile crane of suitable capacity
-Wire rope slings / webbing slings
-Shackles
-Spreader beam if required
-Timber mats / steel plates
-Tag lines"""
-)
-
-crane_name = st.text_input("Crane Name / Model")
-crane_renew = st.text_input("Crane Cert Date")
-crane_expiry = st.text_input("Crane Cert Expiry")
-
-crane_swl = st.text_input("Crane SWL")
-crane_radius = st.text_input("Crane Radius")
-crane_swl_radius = st.text_input("SWL at Radius")
-
-total_swl_lg = st.text_input("Total SWL of Lifting Gear")
-lg_expiry = st.text_input("Lifting Gear Expiry")
-
-st.subheader("Personnel")
-
-site_supervisor = st.text_input("Site Supervisor")
-lifting_supervisor = st.text_input("Lifting Supervisor")
-equipment_operator = st.text_input("Equipment Operator")
-rigger_1 = st.text_input("Rigger 1")
-rigger_2 = st.text_input("Rigger 2")
-
-st.subheader("Conditions")
-
-ground_safe = st.checkbox("Ground Safe", value=True)
-outriggers = st.checkbox("Outriggers Extended", value=True)
-no_overhead_obstacles = st.checkbox("No Overhead Obstacles", value=True)
-lighting = st.checkbox("Lighting Adequate", value=True)
-barricade = st.checkbox("Area Barricaded", value=True)
-
-task_sequence = st.text_area(
-    "Lifting Steps",
-    height=200,
-    value="""1. Deploy crane / lorry loader at designated unloading area
-2. Set up outriggers fully extended and rest on timber mats / steel plates
-3. Carry out rigging and hook-on
-4. Conduct trial lift
-5. Hoist load slowly and steadily
-6. Shift load to designated position
-7. Lower load in a controlled manner
-8. Remove lifting gear and carry out housekeeping"""
-)
-
-col1, col2, col3 = st.columns(3)
-generate_ms = col1.button("Generate Method Statement")
-generate_ra = col2.button("Generate Risk Assessment")
-generate_lp = col3.button("Generate Lifting Plan")
-
-# =====================
 # COMMON FUNCTIONS
 # =====================
 def replace_all(doc, data):
@@ -199,329 +120,7 @@ def format_method_statement(doc):
                             run.font.size = Pt(12)
 
 
-# =====================
-# METHOD STATEMENT
-# =====================
-if generate_ms:
-    try:
-        with st.spinner("Generating Method Statement..."):
-            prompt = f"""
-Create a professional Method Statement for machinery moving and lifting work in Singapore.
-
-Company: {company}
-Project: {project_name}
-Location: {location}
-Description: {description}
-Machine: {machine}
-
-Rules:
-- Use formal contractor wording.
-- Return plain text content for each field.
-- Do not return dictionary-looking text.
-- job_scope must be numbered steps.
-- Do not include explanation, justification, summary, conclusion, or reference to company format.
-- Do not write sentences starting with "The above", "These safety controls", "This sequence", or "This method statement".
-- Do not mention that the content is consistent with previous company documents.
-- Return only the actual content to be inserted into the Word document.
-- equipment must only list equipment and materials.
-- safety_aspect must only list safety precautions.
-- job_scope must only list work steps.
-
-Return these fields:
-equipment
-safety_aspect
-job_scope
-"""
-
-            response = client.responses.create(
-                model="gpt-5.4",
-                input=prompt,
-                tools=[{
-                    "type": "file_search",
-                    "vector_store_ids": [MS_VECTOR_STORE_ID]
-                }],
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": "ms_schema",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "equipment": {"type": "string"},
-                                "safety_aspect": {"type": "string"},
-                                "job_scope": {"type": "string"}
-                            },
-                            "required": ["equipment", "safety_aspect", "job_scope"]
-                        }
-                    }
-                }
-            )
-
-            data = json.loads(response.output_text)
-
-            data["equipment"] = clean_ms_text(data["equipment"])
-            data["safety_aspect"] = clean_ms_text(data["safety_aspect"])
-            data["job_scope"] = clean_ms_text(data["job_scope"])
-
-            doc = Document(MS_TEMPLATE)
-
-            replace_all(doc, {
-                "{{company}}": company,
-                "{{date}}": str(date_input),
-                "{{location}}": location,
-                "{{description_of_work}}": description,
-                "{{machine_spec}}": machine,
-                "{{equipment}}": data["equipment"],
-                "{{safety_aspect}}": data["safety_aspect"],
-                "{{job_scope}}": data["job_scope"],
-                "{{risk_assessment_note}}": "A copy of Risk Assessment will be attached",
-                "{{operation_date}}": str(date_input),
-                "{{operation_time}}": operation_time if operation_time else "To be confirmed",
-                "{{obstacles}}": "To be confirmed",
-                "{{environment}}": "To be confirmed",
-                "{{lifting_crew}}": "To be confirmed",
-                "{{prepared_by}}": "Kevin Wong / Zailani",
-            })
-
-            format_method_statement(doc)
-
-            buffer = BytesIO()
-            doc.save(buffer)
-            buffer.seek(0)
-
-            st.download_button(
-                "Download Method Statement",
-                buffer,
-                "Method_Statement.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-
-    except Exception as e:
-        st.error("Method Statement generation failed")
-        st.exception(e)
-
-
-# =====================
-# BASIC RISK ASSESSMENT
-# =====================
-if generate_ra:
-    try:
-        with st.spinner("Generating Risk Assessment..."):
-            prompt = f"""
-Create a Risk Assessment for machinery moving work.
-
-Company: {company}
-Location: {location}
-Process: Machinery Moving
-
-Return these fields:
-hazards
-controls
-"""
-
-            response = client.responses.create(
-                model="gpt-5.4",
-                input=prompt,
-                tools=[{
-                    "type": "file_search",
-                    "vector_store_ids": [RA_VECTOR_STORE_ID]
-                }],
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": "ra_schema",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "hazards": {"type": "string"},
-                                "controls": {"type": "string"}
-                            },
-                            "required": ["hazards", "controls"]
-                        }
-                    }
-                }
-            )
-
-            data = json.loads(response.output_text)
-            doc = Document(RA_TEMPLATE)
-
-            replace_all(doc, {
-                "{{company}}": company,
-                "{{location}}": location,
-                "{{process}}": "Machinery Moving",
-                "{{date}}": str(date_input),
-                "{{hazards}}": data["hazards"],
-                "{{controls}}": data["controls"]
-            })
-
-            buffer = BytesIO()
-            doc.save(buffer)
-            buffer.seek(0)
-
-            st.download_button(
-                "Download Risk Assessment",
-                buffer,
-                "Risk_Assessment.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-
-    except Exception as e:
-        st.error("Risk Assessment generation failed")
-        st.exception(e)
-
-
-# =====================
-# LIFTING PLAN
-# =====================
-if generate_lp:
-    try:
-        with st.spinner("Generating Lifting Plan..."):
-            prompt = f"""
-Improve and professionalize this lifting method for a lifting plan in Singapore.
-
-Company: {company}
-Project: {project_name}
-Location: {location}
-Description: {description}
-Machine: {machine}
-Machine dimension: {machine_dimension}
-Machine weight: {machine_weight}
-Crane name: {crane_name}
-Crane SWL: {crane_swl}
-Crane radius: {crane_radius}
-SWL at radius: {crane_swl_radius}
-Type of lifting equipment selected: {lifting_equipment_type}
-Type of lifting gears / equipment details:
-{lifting_gear_manual}
-
-Sequence of lifting operations:
-{task_sequence}
-
-Generate:
-- lifting_gear
-- lifting_method
-- safety_controls
-
-Rules:
-- Use formal lifting-plan wording.
-- Return plain text only.
-- No dictionary-looking text.
-- Do not include explanation, justification, summary, or reference to company format.
-- Return only the actual content to be inserted into the Word document.
-- lifting_gear may be generated but will be overridden by user's manual input.
-"""
-
-            response = client.responses.create(
-                model="gpt-5.4",
-                input=prompt,
-                tools=[{
-                    "type": "file_search",
-                    "vector_store_ids": [LP_VECTOR_STORE_ID]
-                }],
-                text={
-                    "format": {
-                        "type": "json_schema",
-                        "name": "lp_schema",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": False,
-                            "properties": {
-                                "lifting_gear": {"type": "string"},
-                                "lifting_method": {"type": "string"},
-                                "safety_controls": {"type": "string"}
-                            },
-                            "required": ["lifting_gear", "lifting_method", "safety_controls"]
-                        }
-                    }
-                }
-            )
-
-            data = json.loads(response.output_text)
-            doc = Document(LP_TEMPLATE)
-
-            replace_all(doc, {
-                "{{company}}": company,
-                "{{project_name}}": project_name,
-                "{{location}}": location,
-                "{{date}}": str(date_input),
-                "{{operation_date}}": str(date_input),
-                "{{operation_time}}": operation_time,
-                "{{description_of_work}}": description,
-                "{{machine_spec}}": machine,
-                "{{machine_name}}": machine,
-                "{{machine_dimension}}": machine_dimension,
-                "{{machine_weight}}": machine_weight,
-                "{{crane_name}}": crane_name,
-                "{{crane_renew}}": crane_renew,
-                "{{crane_expiry}}": crane_expiry,
-                "{{crane_swl}}": crane_swl,
-                "{{crane_radius}}": crane_radius,
-                "{{crane_swl_radius}}": crane_swl_radius,
-                "{{total_swl_lg}}": total_swl_lg,
-                "{{lg_expiry}}": lg_expiry,
-
-                "{{lifting_gear}}": lifting_gear_manual,
-                "{{lifting_method}}": data["lifting_method"],
-                "{{safety_controls}}": data["safety_controls"],
-
-                "{{mobile_crane_checked}}": "☒" if lifting_equipment_type == "Mobile crane" else "☐",
-                "{{lorry_loader_checked}}": "☒" if lifting_equipment_type == "Lorry loader" else "☐",
-
-                "{{site_supervisor}}": site_supervisor,
-                "{{lifting_supervisor}}": lifting_supervisor,
-                "{{equipment_operator}}": equipment_operator,
-                "{{rigger_1}}": rigger_1,
-                "{{rigger_2}}": rigger_2,
-                "{{ground_safe}}": "Yes" if ground_safe else "No",
-                "{{outriggers}}": "Yes" if outriggers else "No",
-                "{{obstacles}}": "No" if no_overhead_obstacles else "Yes",
-                "{{lighting}}": "Yes" if lighting else "No",
-                "{{barricade}}": "Yes" if barricade else "No",
-                "{{prepared_by}}": "Kevin Wong / Zailani"
-            })
-
-            buffer = BytesIO()
-            doc.save(buffer)
-            buffer.seek(0)
-
-            st.download_button(
-                "Download Lifting Plan",
-                buffer,
-                "Lifting_Plan.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
-
-    except Exception as e:
-        st.error("Lifting Plan generation failed")
-        st.exception(e)
-
-
-# ======================================================
-# RISK ASSESSMENT PRO
-# ======================================================
-st.markdown("---")
-st.subheader("Risk Assessment Pro")
-
-ra_process = st.text_input(
-    "RA Process",
-    "Machinery Moving / Lifting Operation"
-)
-
-activities = st.text_area(
-    "Work Activities (1 per line)",
-    height=200,
-    value="""Transport of lifting machinery into or out of site premises
-Setting up of crane on site
-Lifting operation
-Signalling of load"""
-)
-
-generate_ra_pro = st.button("Generate Risk Assessment Pro")
-
-
-def set_cell_text(cell, text):
+def set_ra_cell_text(cell, text):
     cell.text = ""
     p = cell.paragraphs[0]
 
@@ -562,11 +161,11 @@ def clear_rows_after_column_header(table):
         row._element.getparent().remove(row._element)
 
 
-def add_row(table, values):
+def add_ra_row(table, values):
     row = table.add_row().cells
     for i, v in enumerate(values):
         if i < len(row):
-            set_cell_text(row[i], v)
+            set_ra_cell_text(row[i], v)
 
 
 def merge_same_work_activity_cells(table):
@@ -634,28 +233,385 @@ def fill_inventory_table(doc, activities_text, location, process):
         row = table.rows[row_index].cells
 
         if len(row) >= 6:
-            set_cell_text(row[0], "")
-            set_cell_text(row[1], location if idx == 1 else "")
-            set_cell_text(row[2], process if idx == 1 else "")
-            set_cell_text(row[3], str(idx))
-            set_cell_text(row[4], activity)
-            set_cell_text(row[5], "")
+            set_ra_cell_text(row[0], "")
+            set_ra_cell_text(row[1], location if idx == 1 else "")
+            set_ra_cell_text(row[2], process if idx == 1 else "")
+            set_ra_cell_text(row[3], str(idx))
+            set_ra_cell_text(row[4], activity)
+            set_ra_cell_text(row[5], "")
 
 
-if generate_ra_pro:
-    try:
-        with st.spinner("Generating Risk Assessment Pro..."):
+# =====================
+# APP UI
+# =====================
+st.title("Document Generator")
 
-            prompt = f"""
+tab_ms, tab_lp, tab_ra = st.tabs([
+    "Method Statement",
+    "Lifting Plan",
+    "Risk Assessment Pro"
+])
+
+# ======================================================
+# TAB 1 - METHOD STATEMENT
+# ======================================================
+with tab_ms:
+    st.header("Method Statement")
+
+    ms_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ms_company")
+    ms_project_name = st.text_input("Project Name", key="ms_project_name")
+    ms_location = st.text_input("Location of Operation", key="ms_location")
+    ms_description = st.text_area("Description of Work", key="ms_description")
+    ms_machine = st.text_input("Machine Spec", key="ms_machine")
+    ms_date_input = st.date_input("Date", value=date.today(), key="ms_date_input")
+    ms_operation_time = st.text_input("Operation Time", key="ms_operation_time")
+
+    generate_ms = st.button("Generate Method Statement", key="generate_ms")
+
+    if generate_ms:
+        try:
+            with st.spinner("Generating Method Statement..."):
+                prompt = f"""
+Create a professional Method Statement for machinery moving and lifting work in Singapore.
+
+Company: {ms_company}
+Project: {ms_project_name}
+Location: {ms_location}
+Description: {ms_description}
+Machine: {ms_machine}
+
+Rules:
+- Use formal contractor wording.
+- Return plain text content for each field.
+- Do not return dictionary-looking text.
+- job_scope must be numbered steps.
+- Do not include explanation, justification, summary, conclusion, or reference to company format.
+- Do not write sentences starting with "The above", "These safety controls", "This sequence", or "This method statement".
+- Do not mention that the content is consistent with previous company documents.
+- Return only the actual content to be inserted into the Word document.
+- equipment must only list equipment and materials.
+- safety_aspect must only list safety precautions.
+- job_scope must only list work steps.
+
+Return these fields:
+equipment
+safety_aspect
+job_scope
+"""
+
+                response = client.responses.create(
+                    model="gpt-5.4",
+                    input=prompt,
+                    tools=[{
+                        "type": "file_search",
+                        "vector_store_ids": [MS_VECTOR_STORE_ID]
+                    }],
+                    text={
+                        "format": {
+                            "type": "json_schema",
+                            "name": "ms_schema",
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "equipment": {"type": "string"},
+                                    "safety_aspect": {"type": "string"},
+                                    "job_scope": {"type": "string"}
+                                },
+                                "required": ["equipment", "safety_aspect", "job_scope"]
+                            }
+                        }
+                    }
+                )
+
+                data = json.loads(response.output_text)
+
+                data["equipment"] = clean_ms_text(data["equipment"])
+                data["safety_aspect"] = clean_ms_text(data["safety_aspect"])
+                data["job_scope"] = clean_ms_text(data["job_scope"])
+
+                doc = Document(MS_TEMPLATE)
+
+                replace_all(doc, {
+                    "{{company}}": ms_company,
+                    "{{date}}": str(ms_date_input),
+                    "{{location}}": ms_location,
+                    "{{description_of_work}}": ms_description,
+                    "{{machine_spec}}": ms_machine,
+                    "{{equipment}}": data["equipment"],
+                    "{{safety_aspect}}": data["safety_aspect"],
+                    "{{job_scope}}": data["job_scope"],
+                    "{{risk_assessment_note}}": "A copy of Risk Assessment will be attached",
+                    "{{operation_date}}": str(ms_date_input),
+                    "{{operation_time}}": ms_operation_time if ms_operation_time else "To be confirmed",
+                    "{{obstacles}}": "To be confirmed",
+                    "{{environment}}": "To be confirmed",
+                    "{{lifting_crew}}": "To be confirmed",
+                    "{{prepared_by}}": "Kevin Wong / Zailani",
+                })
+
+                format_method_statement(doc)
+
+                buffer = BytesIO()
+                doc.save(buffer)
+                buffer.seek(0)
+
+                st.download_button(
+                    "Download Method Statement",
+                    buffer,
+                    "Method_Statement.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+
+        except Exception as e:
+            st.error("Method Statement generation failed")
+            st.exception(e)
+
+
+# ======================================================
+# TAB 2 - LIFTING PLAN
+# ======================================================
+with tab_lp:
+    st.header("Lifting Plan")
+
+    lp_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="lp_company")
+    lp_project_name = st.text_input("Project Name", key="lp_project_name")
+    lp_location = st.text_input("Location of Lifting Operation", key="lp_location")
+    lp_description = st.text_area("Description of Load / Work", key="lp_description")
+    lp_machine = st.text_input("Machine Name / Spec", key="lp_machine")
+    lp_date_input = st.date_input("Date", value=date.today(), key="lp_date_input")
+    lp_operation_time = st.text_input("Operation Time", key="lp_operation_time")
+
+    st.subheader("Load Details")
+    lp_machine_dimension = st.text_input("Machine Dimension", key="lp_machine_dimension")
+    lp_machine_weight = st.text_input("Machine Weight", key="lp_machine_weight")
+
+    st.subheader("Lifting Equipment Details")
+
+    lifting_equipment_type = st.selectbox(
+        "Type of Lifting Equipment",
+        ["Mobile crane", "Lorry loader"],
+        key="lifting_equipment_type"
+    )
+
+    lifting_gear_manual = st.text_area(
+        "Type of Lifting Gears / Equipment Details",
+        height=160,
+        value="""Mobile crane of suitable capacity
+Wire rope slings / webbing slings
+Shackles
+Spreader beam if required
+Timber mats / steel plates
+Tag lines""",
+        key="lifting_gear_manual"
+    )
+
+    crane_name = st.text_input("Crane Name / Model", key="crane_name")
+    crane_renew = st.text_input("Crane Cert Date", key="crane_renew")
+    crane_expiry = st.text_input("Crane Cert Expiry", key="crane_expiry")
+
+    crane_swl = st.text_input("Crane SWL", key="crane_swl")
+    crane_radius = st.text_input("Crane Radius", key="crane_radius")
+    crane_swl_radius = st.text_input("SWL at Radius", key="crane_swl_radius")
+
+    total_swl_lg = st.text_input("Total SWL of Lifting Gear", key="total_swl_lg")
+    lg_expiry = st.text_input("Lifting Gear Expiry", key="lg_expiry")
+
+    st.subheader("Personnel")
+    site_supervisor = st.text_input("Site Supervisor", key="site_supervisor")
+    lifting_supervisor = st.text_input("Lifting Supervisor", key="lifting_supervisor")
+    equipment_operator = st.text_input("Equipment Operator", key="equipment_operator")
+    rigger_1 = st.text_input("Rigger 1", key="rigger_1")
+    rigger_2 = st.text_input("Rigger 2", key="rigger_2")
+
+    st.subheader("Conditions")
+    ground_safe = st.checkbox("Ground Safe", value=True, key="ground_safe")
+    outriggers = st.checkbox("Outriggers Extended", value=True, key="outriggers")
+    no_overhead_obstacles = st.checkbox("No Overhead Obstacles", value=True, key="no_overhead_obstacles")
+    lighting = st.checkbox("Lighting Adequate", value=True, key="lighting")
+    barricade = st.checkbox("Area Barricaded", value=True, key="barricade")
+
+    task_sequence = st.text_area(
+        "Lifting Steps",
+        height=200,
+        value="""1. Deploy crane / lorry loader at designated unloading area
+2. Set up outriggers fully extended and rest on timber mats / steel plates
+3. Carry out rigging and hook-on
+4. Conduct trial lift
+5. Hoist load slowly and steadily
+6. Shift load to designated position
+7. Lower load in a controlled manner
+8. Remove lifting gear and carry out housekeeping""",
+        key="task_sequence"
+    )
+
+    generate_lp = st.button("Generate Lifting Plan", key="generate_lp")
+
+    if generate_lp:
+        try:
+            with st.spinner("Generating Lifting Plan..."):
+                prompt = f"""
+Improve and professionalize this lifting method for a lifting plan in Singapore.
+
+Company: {lp_company}
+Project: {lp_project_name}
+Location: {lp_location}
+Description: {lp_description}
+Machine: {lp_machine}
+Machine dimension: {lp_machine_dimension}
+Machine weight: {lp_machine_weight}
+Crane name: {crane_name}
+Crane SWL: {crane_swl}
+Crane radius: {crane_radius}
+SWL at radius: {crane_swl_radius}
+Type of lifting equipment selected: {lifting_equipment_type}
+Type of lifting gears / equipment details:
+{lifting_gear_manual}
+
+Sequence of lifting operations:
+{task_sequence}
+
+Generate:
+- lifting_gear
+- lifting_method
+- safety_controls
+
+Rules:
+- Use formal lifting-plan wording.
+- Return plain text only.
+- No dictionary-looking text.
+- Do not include explanation, justification, summary, or reference to company format.
+- Return only the actual content to be inserted into the Word document.
+- lifting_gear may be generated but will be overridden by user's manual input.
+"""
+
+                response = client.responses.create(
+                    model="gpt-5.4",
+                    input=prompt,
+                    tools=[{
+                        "type": "file_search",
+                        "vector_store_ids": [LP_VECTOR_STORE_ID]
+                    }],
+                    text={
+                        "format": {
+                            "type": "json_schema",
+                            "name": "lp_schema",
+                            "schema": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "lifting_gear": {"type": "string"},
+                                    "lifting_method": {"type": "string"},
+                                    "safety_controls": {"type": "string"}
+                                },
+                                "required": ["lifting_gear", "lifting_method", "safety_controls"]
+                            }
+                        }
+                    }
+                )
+
+                data = json.loads(response.output_text)
+                doc = Document(LP_TEMPLATE)
+
+                replace_all(doc, {
+                    "{{company}}": lp_company,
+                    "{{project_name}}": lp_project_name,
+                    "{{location}}": lp_location,
+                    "{{date}}": str(lp_date_input),
+                    "{{operation_date}}": str(lp_date_input),
+                    "{{operation_time}}": lp_operation_time,
+                    "{{description_of_work}}": lp_description,
+                    "{{machine_spec}}": lp_machine,
+                    "{{machine_name}}": lp_machine,
+                    "{{machine_dimension}}": lp_machine_dimension,
+                    "{{machine_weight}}": lp_machine_weight,
+                    "{{crane_name}}": crane_name,
+                    "{{crane_renew}}": crane_renew,
+                    "{{crane_expiry}}": crane_expiry,
+                    "{{crane_swl}}": crane_swl,
+                    "{{crane_radius}}": crane_radius,
+                    "{{crane_swl_radius}}": crane_swl_radius,
+                    "{{total_swl_lg}}": total_swl_lg,
+                    "{{lg_expiry}}": lg_expiry,
+                    "{{lifting_gear}}": lifting_gear_manual,
+                    "{{lifting_method}}": data["lifting_method"],
+                    "{{safety_controls}}": data["safety_controls"],
+                    "{{mobile_crane_checked}}": "☒" if lifting_equipment_type == "Mobile crane" else "☐",
+                    "{{lorry_loader_checked}}": "☒" if lifting_equipment_type == "Lorry loader" else "☐",
+                    "{{site_supervisor}}": site_supervisor,
+                    "{{lifting_supervisor}}": lifting_supervisor,
+                    "{{equipment_operator}}": equipment_operator,
+                    "{{rigger_1}}": rigger_1,
+                    "{{rigger_2}}": rigger_2,
+                    "{{ground_safe}}": "Yes" if ground_safe else "No",
+                    "{{outriggers}}": "Yes" if outriggers else "No",
+                    "{{obstacles}}": "No" if no_overhead_obstacles else "Yes",
+                    "{{lighting}}": "Yes" if lighting else "No",
+                    "{{barricade}}": "Yes" if barricade else "No",
+                    "{{prepared_by}}": "Kevin Wong / Zailani"
+                })
+
+                buffer = BytesIO()
+                doc.save(buffer)
+                buffer.seek(0)
+
+                st.download_button(
+                    "Download Lifting Plan",
+                    buffer,
+                    "Lifting_Plan.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+
+        except Exception as e:
+            st.error("Lifting Plan generation failed")
+            st.exception(e)
+
+
+# ======================================================
+# TAB 3 - RISK ASSESSMENT PRO
+# ======================================================
+with tab_ra:
+    st.header("Risk Assessment Pro")
+
+    ra_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ra_company")
+    ra_project_name = st.text_input("Project Name", key="ra_project_name")
+    ra_location = st.text_input("Location", key="ra_location")
+    ra_machine = st.text_input("Machine Spec", key="ra_machine")
+    ra_description = st.text_area("Description of Work", key="ra_description")
+    ra_date_input = st.date_input("Date", value=date.today(), key="ra_date_input")
+
+    ra_process = st.text_input(
+        "RA Process",
+        "Machinery Moving / Lifting Operation",
+        key="ra_process"
+    )
+
+    activities = st.text_area(
+        "Work Activities (1 per line)",
+        height=200,
+        value="""Transport of lifting machinery into or out of site premises
+Setting up of crane on site
+Lifting operation
+Signalling of load""",
+        key="activities"
+    )
+
+    generate_ra_pro = st.button("Generate Risk Assessment Pro", key="generate_ra_pro")
+
+    if generate_ra_pro:
+        try:
+            with st.spinner("Generating Risk Assessment Pro..."):
+
+                prompt = f"""
 Create professional Singapore style 5x5 Risk Assessment.
 
-Company: {company}
-Project: {project_name}
-Location: {location}
+Company: {ra_company}
+Project: {ra_project_name}
+Location: {ra_location}
 Process: {ra_process}
-Machine: {machine}
-Description: {description}
-Date: {date_input}
+Machine: {ra_machine}
+Description: {ra_description}
+Date: {ra_date_input}
 
 Activities:
 {activities}
@@ -687,72 +643,72 @@ Schema:
     "rl":"1",
     "rrpn":"4",
     "person":"Supervisor on site",
-    "due_date":"{date_input}",
+    "due_date":"{ra_date_input}",
     "remark":""
    }}
  ]
 }}
 """
 
-            response = client.responses.create(
-                model="gpt-5.4",
-                input=prompt,
-                tools=[{
-                    "type": "file_search",
-                    "vector_store_ids": [RA_VECTOR_STORE_ID]
-                }]
-            )
+                response = client.responses.create(
+                    model="gpt-5.4",
+                    input=prompt,
+                    tools=[{
+                        "type": "file_search",
+                        "vector_store_ids": [RA_VECTOR_STORE_ID]
+                    }]
+                )
 
-            data = json.loads(response.output_text)
+                data = json.loads(response.output_text)
 
-            doc = Document(RA_TEMPLATE)
+                doc = Document(RA_TEMPLATE)
 
-            replace_all(doc, {
-                "{{company}}": company,
-                "{{location}}": location,
-                "{{process}}": ra_process,
-                "{{date}}": str(date_input)
-            })
+                replace_all(doc, {
+                    "{{company}}": ra_company,
+                    "{{location}}": ra_location,
+                    "{{process}}": ra_process,
+                    "{{date}}": str(ra_date_input)
+                })
 
-            fill_inventory_table(doc, activities, location, ra_process)
+                fill_inventory_table(doc, activities, ra_location, ra_process)
 
-            table = find_ra_table(doc)
+                table = find_ra_table(doc)
 
-            if table:
-                clear_rows_after_column_header(table)
+                if table:
+                    clear_rows_after_column_header(table)
 
-                for r in data["rows"]:
-                    add_row(table, [
-                        r["ref"],
-                        r["work_activity"],
-                        r["hazard"],
-                        r["possible_injury"],
-                        r["existing_controls"],
-                        r["s"],
-                        r["l"],
-                        r["rpn"],
-                        r["additional_controls"],
-                        r["rs"],
-                        r["rl"],
-                        r["rrpn"],
-                        r["person"],
-                        r["due_date"],
-                        r["remark"]
-                    ])
+                    for r in data["rows"]:
+                        add_ra_row(table, [
+                            r["ref"],
+                            r["work_activity"],
+                            r["hazard"],
+                            r["possible_injury"],
+                            r["existing_controls"],
+                            r["s"],
+                            r["l"],
+                            r["rpn"],
+                            r["additional_controls"],
+                            r["rs"],
+                            r["rl"],
+                            r["rrpn"],
+                            r["person"],
+                            r["due_date"],
+                            r["remark"]
+                        ])
 
-                merge_same_work_activity_cells(table)
+                    merge_same_work_activity_cells(table)
 
-            buffer = BytesIO()
-            doc.save(buffer)
-            buffer.seek(0)
+                buffer = BytesIO()
+                doc.save(buffer)
+                buffer.seek(0)
 
-            st.download_button(
-                "Download Risk Assessment Pro",
-                buffer,
-                "Risk_Assessment_Pro.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
+                st.download_button(
+                    "Download Risk Assessment Pro",
+                    buffer,
+                    "Risk_Assessment_Pro.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
 
-    except Exception as e:
-        st.error("Risk Assessment Pro generation failed")
-        st.exception(e)
+        except Exception as e:
+            st.error("Risk Assessment Pro generation failed")
+            st.exception(e)
