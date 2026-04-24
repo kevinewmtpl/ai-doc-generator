@@ -105,6 +105,7 @@ def replace_all(doc, data):
                         if k in p.text:
                             p.text = p.text.replace(k, str(v))
 
+
 # ======================================================
 # RISK ASSESSMENT PRO
 # ======================================================
@@ -127,6 +128,7 @@ Signalling of load"""
 )
 
 generate_ra_pro = st.button("Generate Risk Assessment Pro")
+
 
 # -------------------------
 # helper functions - FIXED
@@ -173,6 +175,57 @@ def add_row(table, values):
         if i < len(row):
             set_cell_text(row[i], v)
 
+
+# -------------------------
+# Inventory of Work Activities functions
+# -------------------------
+def find_inventory_table(doc):
+    for table in doc.tables:
+        full = " ".join(c.text for row in table.rows for c in row.cells)
+        if "Ref No." in full and "Location" in full and "Process" in full and "S/No." in full and "Work Activity" in full:
+            return table
+    return None
+
+
+def fill_inventory_table(doc, activities_text, location, process):
+    table = find_inventory_table(doc)
+
+    if table is None:
+        return
+
+    activity_list = [
+        a.strip()
+        for a in activities_text.split("\n")
+        if a.strip()
+    ]
+
+    start_row = None
+    for i, row in enumerate(table.rows):
+        row_text = " ".join(cell.text.strip() for cell in row.cells)
+        if "S/No." in row_text and "Work Activity" in row_text:
+            start_row = i + 1
+            break
+
+    if start_row is None:
+        return
+
+    for idx, activity in enumerate(activity_list, start=1):
+        row_index = start_row + idx - 1
+
+        if row_index >= len(table.rows):
+            table.add_row()
+
+        row = table.rows[row_index].cells
+
+        if len(row) >= 6:
+            set_cell_text(row[0], "")
+            set_cell_text(row[1], location if idx == 1 else "")
+            set_cell_text(row[2], process if idx == 1 else "")
+            set_cell_text(row[3], str(idx))
+            set_cell_text(row[4], activity)
+            set_cell_text(row[5], "")
+
+
 # -------------------------
 # GENERATE RA PRO
 # -------------------------
@@ -194,7 +247,13 @@ Date: {date_input}
 Activities:
 {activities}
 
-Return JSON only.
+Important:
+- Every generated row must directly match the work activities provided.
+- Do not invent unrelated activities.
+- For each activity, create 1 to 3 relevant hazards.
+- Use machinery moving / lifting / forklift / jacking / roller / crating style controls.
+- Use wording style similar to Eric Wong Machinery Transportation Pte Ltd RA examples.
+- Return JSON only.
 
 Schema:
 {{
@@ -240,6 +299,10 @@ Schema:
                 "{{date}}": str(date_input)
             })
 
+            # Fill first page Inventory of Work Activities
+            fill_inventory_table(doc, activities, location, ra_process)
+
+            # Fill Risk Assessment table
             table = find_ra_table(doc)
 
             if table:
