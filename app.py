@@ -482,10 +482,8 @@ with tab_lp:
         lifting_gear_manual = st.text_area(
             "Type of Lifting Gears / Equipment Details",
             height=160,
-            value="""Mobile crane of suitable capacity
-Wire rope slings / webbing slings
+            value="""Wire rope slings / webbing slings
 Shackles
-Spreader beam if required
 Timber mats / steel plates
 Tag lines""",
             key="lifting_gear_manual"
