@@ -91,7 +91,7 @@ generate_ra = col2.button("Generate Risk Assessment")
 generate_lp = col3.button("Generate Lifting Plan")
 
 # =====================
-# REPLACE FUNCTION
+# COMMON FUNCTIONS
 # =====================
 def replace_all(doc, data):
     for p in doc.paragraphs:
@@ -136,20 +136,51 @@ def clean_ms_text(text):
 
 
 def format_method_statement(doc):
+    headings = [
+        "METHOD OF STATEMENT",
+        "Description of work",
+        "Machine Spec",
+        "Risk Assessment",
+        "Date / Time of Operation",
+        "Location of Operation",
+        "Equipment Use",
+        "Obstacles",
+        "Environment",
+        "Lifting Crew",
+        "Safety Aspect",
+        "Job Scope",
+    ]
+
     for para in doc.paragraphs:
+        txt = para.text.strip()
+
         for run in para.runs:
             run.font.name = "Times New Roman"
             run._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
-            run.font.size = Pt(12)
+
+            if txt in headings:
+                run.font.size = Pt(16)
+                run.bold = True
+                run.underline = True
+            else:
+                run.font.size = Pt(12)
 
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 for para in cell.paragraphs:
+                    txt = para.text.strip()
+
                     for run in para.runs:
                         run.font.name = "Times New Roman"
                         run._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
-                        run.font.size = Pt(12)
+
+                        if txt in headings:
+                            run.font.size = Pt(16)
+                            run.bold = True
+                            run.underline = True
+                        else:
+                            run.font.size = Pt(12)
 
 
 # =====================
