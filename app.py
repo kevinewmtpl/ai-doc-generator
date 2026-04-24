@@ -45,6 +45,22 @@ operation_time = st.text_input("Operation Time")
 machine_dimension = st.text_input("Machine Dimension")
 machine_weight = st.text_input("Machine Weight")
 
+lifting_equipment_type = st.selectbox(
+    "Type of Lifting Equipment",
+    ["Mobile crane", "Lorry loader"]
+)
+
+lifting_gear_manual = st.text_area(
+    "Type of Lifting Gears / Equipment Details",
+    height=160,
+    value="""Mobile crane of suitable capacity
+Wire rope slings / webbing slings
+Shackles
+Spreader beam if required
+Timber mats / steel plates
+Tag lines"""
+)
+
 crane_name = st.text_input("Crane Name / Model")
 crane_renew = st.text_input("Crane Cert Date")
 crane_expiry = st.text_input("Crane Cert Expiry")
@@ -376,6 +392,9 @@ Crane name: {crane_name}
 Crane SWL: {crane_swl}
 Crane radius: {crane_radius}
 SWL at radius: {crane_swl_radius}
+Type of lifting equipment selected: {lifting_equipment_type}
+Type of lifting gears / equipment details:
+{lifting_gear_manual}
 
 Sequence of lifting operations:
 {task_sequence}
@@ -386,11 +405,12 @@ Generate:
 - safety_controls
 
 Rules:
-- Use formal lifting-plan wording
-- Return plain text only
-- No dictionary-looking text
+- Use formal lifting-plan wording.
+- Return plain text only.
+- No dictionary-looking text.
 - Do not include explanation, justification, summary, or reference to company format.
 - Return only the actual content to be inserted into the Word document.
+- lifting_gear may be generated but will be overridden by user's manual input.
 """
 
             response = client.responses.create(
@@ -441,9 +461,14 @@ Rules:
                 "{{crane_swl_radius}}": crane_swl_radius,
                 "{{total_swl_lg}}": total_swl_lg,
                 "{{lg_expiry}}": lg_expiry,
-                "{{lifting_gear}}": data["lifting_gear"],
+
+                "{{lifting_gear}}": lifting_gear_manual,
                 "{{lifting_method}}": data["lifting_method"],
                 "{{safety_controls}}": data["safety_controls"],
+
+                "{{mobile_crane_checked}}": "☒" if lifting_equipment_type == "Mobile crane" else "☐",
+                "{{lorry_loader_checked}}": "☒" if lifting_equipment_type == "Lorry loader" else "☐",
+
                 "{{site_supervisor}}": site_supervisor,
                 "{{lifting_supervisor}}": lifting_supervisor,
                 "{{equipment_operator}}": equipment_operator,
