@@ -264,7 +264,7 @@ with tab_ms:
     ms_description = st.text_area("Description of Work", key="ms_description")
     ms_machine = st.text_input("Machine Spec", key="ms_machine")
     ms_date_input = st.date_input("Date", value=date.today(), key="ms_date_input")
-    ms_operation_time = st.text_input("Operation Time", key="ms_operation_time")
+    ms_operation_time = st.text_input("Operation Date & Time", key="ms_operation_time")
 
     generate_ms = st.button("Generate Method Statement", key="generate_ms")
 
