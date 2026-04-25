@@ -141,7 +141,7 @@ client = OpenAI(api_key=st.secrets["sk-proj-_qfCzeNh2mjfS0baYYstTPAzQpNvU_5w7agA
 # =====================
 MS_VECTOR_STORE_ID = "vs_69ecc533a1208191a8595c674753e99e"
 RA_VECTOR_STORE_ID = "vs_69ecd191648481919d1d1d57f21264af"
-LP_VECTOR_STORE_ID = "vs_69ecdc44d59081919fb10574510b7454"]
+LP_VECTOR_STORE_ID = "vs_69ecdc44d59081919fb10574510b7454"
 
 # =====================
 # PATHS
