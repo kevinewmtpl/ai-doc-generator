@@ -134,14 +134,14 @@ st.markdown("""
 # =====================
 # OPENAI CLIENT
 # =====================
-client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+client = OpenAI(api_key=st.secrets["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"])
 
 # =====================
 # VECTOR STORES
 # =====================
-MS_VECTOR_STORE_ID = "vs_69e3287971a48191b6b4da9f7a9679eb"
-RA_VECTOR_STORE_ID = "vs_69e34a1321a88191a9d80166ae6316c7"
-LP_VECTOR_STORE_ID = "vs_69e865a133888191b5c39d3e47f9d578"
+MS_VECTOR_STORE_ID = "vs_69ecc533a1208191a8595c674753e99e"
+RA_VECTOR_STORE_ID = "vs_69ecd191648481919d1d1d57f21264af"
+LP_VECTOR_STORE_ID = "vs_69ecdc44d59081919fb10574510b7454"]
 
 # =====================
 # PATHS
