@@ -134,7 +134,7 @@ st.markdown("""
 # =====================
 # OPENAI CLIENT
 # =====================
-client = OpenAI(api_key=st.secrets["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"])
+client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
 
 # =====================
 # VECTOR STORES
