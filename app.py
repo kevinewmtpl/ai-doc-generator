@@ -19,6 +19,22 @@ st.set_page_config(
 )
 
 # =====================
+# SESSION PAGE CONTROL
+# =====================
+PAGES = [
+    "🏠 Dashboard",
+    "📄 Method Statement",
+    "🏗️ Lifting Plan",
+    "⚠️ Risk Assessment Pro",
+    "🧰 Lifting Gear Register",
+    "⏰ Expiry Alerts",
+    "⚙️ Settings"
+]
+
+if "page" not in st.session_state:
+    st.session_state.page = "🏠 Dashboard"
+
+# =====================
 # PREMIUM UI STYLE
 # =====================
 st.markdown("""
@@ -64,6 +80,7 @@ st.markdown("""
     border: 1px solid #e5e7eb;
     box-shadow: 0px 4px 14px rgba(15,23,42,0.08);
     min-height: 145px;
+    margin-bottom: 12px;
 }
 
 .dashboard-card h3 {
@@ -91,6 +108,7 @@ st.markdown("""
     padding: 0.65rem 1.25rem;
     font-weight: 700;
     border: none;
+    width: 100%;
 }
 
 .stButton > button:hover {
@@ -155,6 +173,11 @@ LP_TEMPLATE = os.path.join(BASE_DIR, "Templates", "Lifting Plan Template.docx")
 # =====================
 # COMMON FUNCTIONS
 # =====================
+def go_to_page(page_name):
+    st.session_state.page = page_name
+    st.rerun()
+
+
 def replace_all(doc, data):
     for p in doc.paragraphs:
         for k, v in data.items():
@@ -391,28 +414,26 @@ with st.sidebar:
     st.markdown("AI Document Control")
     st.markdown("---")
 
-    page = st.radio(
+    selected_page = st.radio(
         "Navigation",
-        [
-            "🏠 Dashboard",
-            "📄 Method Statement",
-            "🏗️ Lifting Plan",
-            "⚠️ Risk Assessment Pro",
-            "🧰 Lifting Gear Register",
-            "⏰ Expiry Alerts",
-            "⚙️ Settings"
-        ]
+        PAGES,
+        index=PAGES.index(st.session_state.page),
+        key="sidebar_navigation"
     )
+
+    st.session_state.page = selected_page
+    page = st.session_state.page
 
     st.markdown("---")
     st.caption("Internal system for document preparation and lifting operation records.")
+
 
 # ======================================================
 # DASHBOARD
 # ======================================================
 if page == "🏠 Dashboard":
     st.markdown("## EWMT AI Document Control Dashboard")
-    st.caption("Select a module from the sidebar to generate professional project documents.")
+    st.caption("Click a module below or use the sidebar to generate professional project documents.")
 
     col1, col2, col3 = st.columns(3)
 
@@ -424,6 +445,9 @@ if page == "🏠 Dashboard":
         </div>
         """, unsafe_allow_html=True)
 
+        if st.button("Open Method Statement", key="open_ms"):
+            go_to_page("📄 Method Statement")
+
     with col2:
         st.markdown("""
         <div class="dashboard-card">
@@ -432,6 +456,9 @@ if page == "🏠 Dashboard":
         </div>
         """, unsafe_allow_html=True)
 
+        if st.button("Open Lifting Plan", key="open_lp"):
+            go_to_page("🏗️ Lifting Plan")
+
     with col3:
         st.markdown("""
         <div class="dashboard-card">
@@ -439,6 +466,9 @@ if page == "🏠 Dashboard":
             <p>Create structured 5x5 risk assessments based on actual work activities.</p>
         </div>
         """, unsafe_allow_html=True)
+
+        if st.button("Open Risk Assessment", key="open_ra"):
+            go_to_page("⚠️ Risk Assessment Pro")
 
     st.markdown("### Coming Modules")
     col4, col5, col6 = st.columns(3)
@@ -451,6 +481,9 @@ if page == "🏠 Dashboard":
         </div>
         """, unsafe_allow_html=True)
 
+        if st.button("Open Lifting Gear Register", key="open_lg"):
+            go_to_page("🧰 Lifting Gear Register")
+
     with col5:
         st.markdown("""
         <div class="dashboard-card">
@@ -459,6 +492,9 @@ if page == "🏠 Dashboard":
         </div>
         """, unsafe_allow_html=True)
 
+        if st.button("Open Expiry Alerts", key="open_expiry"):
+            go_to_page("⏰ Expiry Alerts")
+
     with col6:
         st.markdown("""
         <div class="dashboard-card">
@@ -466,6 +502,9 @@ if page == "🏠 Dashboard":
             <p>Manage templates, prepared by names and default company details.</p>
         </div>
         """, unsafe_allow_html=True)
+
+        if st.button("Open Settings", key="open_settings"):
+            go_to_page("⚙️ Settings")
 
 
 # ======================================================
