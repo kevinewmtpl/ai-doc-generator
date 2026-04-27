@@ -692,23 +692,34 @@ with st.sidebar:
     st.markdown("AI Document Control")
     st.markdown("---")
 
-    selected_page = st.selectbox(
-        "Navigation",
-        PAGES,
-        index=PAGES.index(st.session_state.page) if st.session_state.page in PAGES else 0,
-        key="nav_selectbox"
-    )
+    if st.button("🏠 Dashboard", key="side_dashboard"):
+        go_to_page("🏠 Dashboard")
 
-    if st.button("Go to selected module", key="nav_go_button"):
-        st.session_state.page = selected_page
-        st.rerun()
+    if st.button("📄 Method Statement", key="side_method_statement"):
+        go_to_page("📄 Method Statement")
+
+    if st.button("🏗️ Lifting Plan", key="side_lifting_plan"):
+        go_to_page("🏗️ Lifting Plan")
+
+    if st.button("⚠️ Risk Assessment Pro", key="side_risk_assessment"):
+        go_to_page("⚠️ Risk Assessment Pro")
+
+    if st.button("🧰 Lifting Gear Register", key="side_lifting_gear"):
+        go_to_page("🧰 Lifting Gear Register")
+
+    if st.button("👷 Worker Training Certificate", key="side_worker_training"):
+        go_to_page("👷 Worker Training Certificate")
+
+    if st.button("⏰ Expiry Alerts", key="side_expiry_alerts"):
+        go_to_page("⏰ Expiry Alerts")
+
+    if st.button("⚙️ Settings", key="side_settings"):
+        go_to_page("⚙️ Settings")
 
     page = st.session_state.page
 
     st.markdown("---")
     st.caption("Internal system for document preparation and lifting operation records.")
-
-
 # ======================================================
 # DASHBOARD
 # ======================================================
