@@ -1190,9 +1190,9 @@ if page == "🧰 Lifting Gear Register":
 # ======================================================
 if page == "👷 Worker Training Certificate":
     certificate_browser(
-        folder_name="Worker Training Certificate",
+        folder_name="Workers Certificate",
         title="👷 Worker Training Certificate",
-        info_text="Certificates loaded from GitHub folder: Worker Training Certificate",
+        info_text="Certificates loaded from GitHub folder: Workers Certificate",
         search_label="Search by worker name / course / keyword",
         search_placeholder="Example: Ibrahim, forklift, boom lift, lifting supervisor, rigger",
         download_label="Download Selected Worker Certificate"
