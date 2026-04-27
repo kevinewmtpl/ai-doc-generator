@@ -683,6 +683,80 @@ def certificate_browser(folder_name, title, info_text, search_label, search_plac
     if selected_file.lower().endswith(".docx"):
         st.info("Word document preview is not supported inside Streamlit. Please download the file to view.")
 
+# =====================
+# DASHBOARD COUNT FUNCTIONS
+# =====================
+def count_files_in_folder(folder_name, allowed_ext=(".pdf", ".png", ".jpg", ".jpeg", ".docx")):
+    folder_path = os.path.join(BASE_DIR, folder_name)
+
+    if not os.path.exists(folder_path):
+        return 0
+
+    return len([
+        f for f in os.listdir(folder_path)
+        if f.lower().endswith(allowed_ext)
+    ])
+
+
+def get_lifting_gear_expiry_counts(alert_days=30):
+    import re
+
+    cert_folder = os.path.join(BASE_DIR, "Lifting Gears Certificate")
+
+    counts = {
+        "expired": 0,
+        "expiring_soon": 0,
+        "valid": 0,
+        "unknown": 0
+    }
+
+    if not os.path.exists(cert_folder):
+        return counts
+
+    files = [
+        f for f in os.listdir(cert_folder)
+        if f.lower().endswith((".pdf", ".png", ".jpg", ".jpeg"))
+    ]
+
+    today = date.today()
+
+    patterns = [
+        r"(\d{4})[-_\\.](\d{1,2})[-_\\.](\d{1,2})",
+        r"(\d{1,2})[-_\\.](\d{1,2})[-_\\.](\d{4})",
+    ]
+
+    for f in files:
+        found_date = None
+
+        for pattern in patterns:
+            match = re.search(pattern, f)
+
+            if match:
+                try:
+                    parts = match.groups()
+
+                    if len(parts[0]) == 4:
+                        found_date = date(int(parts[0]), int(parts[1]), int(parts[2]))
+                    else:
+                        found_date = date(int(parts[2]), int(parts[1]), int(parts[0]))
+
+                    break
+                except Exception:
+                    found_date = None
+
+        if not found_date:
+            counts["unknown"] += 1
+        else:
+            days_left = (found_date - today).days
+
+            if days_left < 0:
+                counts["expired"] += 1
+            elif days_left <= alert_days:
+                counts["expiring_soon"] += 1
+            else:
+                counts["valid"] += 1
+
+    return counts
 
 # =====================
 # SIDEBAR NAVIGATION
@@ -720,10 +794,19 @@ with st.sidebar:
 
     st.markdown("---")
     st.caption("Internal system for document preparation and lifting operation records.")
+    
 # ======================================================
 # DASHBOARD
 # ======================================================
 if page == "🏠 Dashboard":
+    lifting_gear_count = count_files_in_folder("Lifting Gears Certificate")
+    worker_cert_count = count_files_in_folder("Workers Certificate")
+    expiry_counts = get_lifting_gear_expiry_counts(alert_days=30)
+
+    expired_count = expiry_counts["expired"]
+    expiring_soon_count = expiry_counts["expiring_soon"]
+    valid_count = expiry_counts["valid"]
+
     st.markdown("""
     <div class="section-title">EWMT AI Document Control Dashboard</div>
     <div class="section-caption">
@@ -734,38 +817,69 @@ if page == "🏠 Dashboard":
     m1, m2, m3, m4 = st.columns(4)
 
     with m1:
-        st.markdown("""
+        st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-label">Documents Generated</div>
-            <div class="metric-value">128</div>
+            <div class="metric-label">Document Modules</div>
+            <div class="metric-value">3</div>
             <div class="metric-small">Method Statement / RA / Lifting Plan</div>
         </div>
         """, unsafe_allow_html=True)
 
     with m2:
-        st.markdown("""
+        st.markdown(f"""
         <div class="metric-card">
             <div class="metric-label">Gear Records</div>
-            <div class="metric-value">64</div>
-            <div class="metric-small">Slings, shackles, wire ropes</div>
+            <div class="metric-value">{lifting_gear_count}</div>
+            <div class="metric-small">Files in Lifting Gears Certificate folder</div>
         </div>
         """, unsafe_allow_html=True)
 
     with m3:
-        st.markdown("""
+        st.markdown(f"""
         <div class="metric-card">
             <div class="metric-label">Expiring Soon</div>
-            <div class="metric-value">8</div>
-            <div class="metric-small">Certificate expiry monitoring</div>
+            <div class="metric-value">{expiring_soon_count}</div>
+            <div class="metric-small">Within next 30 days</div>
         </div>
         """, unsafe_allow_html=True)
 
     with m4:
-        st.markdown("""
+        st.markdown(f"""
         <div class="metric-card">
             <div class="metric-label">Worker Certificates</div>
-            <div class="metric-value">42</div>
-            <div class="metric-small">Training and competency records</div>
+            <div class="metric-value">{worker_cert_count}</div>
+            <div class="metric-small">Files in Workers Certificate folder</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown('<div class="section-title">Certificate Status</div>', unsafe_allow_html=True)
+
+    s1, s2, s3 = st.columns(3)
+
+    with s1:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Expired</div>
+            <div class="metric-value">{expired_count}</div>
+            <div class="metric-small">Past expiry date</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with s2:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Expiring Soon</div>
+            <div class="metric-value">{expiring_soon_count}</div>
+            <div class="metric-small">Within next 30 days</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with s3:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-label">Valid</div>
+            <div class="metric-value">{valid_count}</div>
+            <div class="metric-small">More than 30 days remaining</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -875,11 +989,10 @@ if page == "🏠 Dashboard":
     st.markdown("""
     <div class="footer-note">
         <b>EWMT Internal System</b><br>
-        For preparation of method statements, lifting plans, risk assessments, lifting gear records and worker certificate control.
+        Dashboard counts are now calculated from your GitHub folders and lifting gear expiry filenames.
     </div>
     """, unsafe_allow_html=True)
-
-
+    
 # ======================================================
 # METHOD STATEMENT
 # ======================================================
