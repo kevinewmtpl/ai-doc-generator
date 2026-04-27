@@ -904,6 +904,7 @@ if page == "⚠️ Risk Assessment Pro":
         ra_machine = st.text_input("Machine Spec", key="ra_machine")
         ra_description = st.text_area("Description of Work", key="ra_description")
         ra_date_input = st.date_input("Date", value=date.today(), key="ra_date_input")
+        ra_due_date_input = st.date_input("Due Date", value=date.today(), key="ra_due_date_input")
 
     with st.expander("Risk Assessment Details", expanded=True):
         ra_process = st.text_input(
@@ -938,6 +939,7 @@ Process: {ra_process}
 Machine: {ra_machine}
 Description: {ra_description}
 Date: {ra_date_input}
+Due Date: {ra_due_date_input}
 
 Activities:
 {activities}
@@ -969,7 +971,7 @@ Schema:
     "rl":"1",
     "rrpn":"4",
     "person":"Supervisor on site",
-    "due_date":"{ra_date_input}",
+    "due_date":"{ra_due_date_input}",
     "remark":""
    }}
  ]
@@ -993,7 +995,8 @@ Schema:
                     "{{company}}": ra_company,
                     "{{location}}": ra_location,
                     "{{process}}": ra_process,
-                    "{{date}}": str(ra_date_input)
+                    "{{date}}": str(ra_date_input),
+                    "{{due_date}}": str(ra_due_date_input)
                 })
 
                 fill_inventory_table(doc, activities, ra_location, ra_process)
@@ -1018,7 +1021,7 @@ Schema:
                             r["rl"],
                             r["rrpn"],
                             r["person"],
-                            r["due_date"],
+                            str(ra_due_date_input),
                             r["remark"]
                         ])
 
