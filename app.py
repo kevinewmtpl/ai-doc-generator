@@ -28,6 +28,7 @@ PAGES = [
     "🏗️ Lifting Plan",
     "⚠️ Risk Assessment Pro",
     "🧰 Lifting Gear Register",
+    "👷 Worker Training Certificate",
     "⏰ Expiry Alerts",
     "⚙️ Settings"
 ]
@@ -398,6 +399,117 @@ def fill_inventory_table(doc, activities_text, location, process):
             set_ra_cell_text(row[5], "")
 
 
+def certificate_browser(folder_name, title, info_text, search_label, search_placeholder, download_label):
+    st.markdown(f"## {title}")
+    st.info(info_text)
+
+    cert_folder = os.path.join(BASE_DIR, folder_name)
+
+    if not os.path.exists(cert_folder):
+        st.error(f"Folder not found: {folder_name}")
+        st.code(folder_name)
+        st.info(f"Create this folder in your GitHub project and upload files inside.")
+        return
+
+    files = [
+        f for f in os.listdir(cert_folder)
+        if f.lower().endswith((".pdf", ".png", ".jpg", ".jpeg", ".docx"))
+    ]
+
+    files = sorted(files)
+
+    if not files:
+        st.warning(f"No files found inside {folder_name} folder.")
+        return
+
+    st.success(f"Found {len(files)} file(s).")
+
+    search = st.text_input(
+        search_label,
+        "",
+        placeholder=search_placeholder
+    )
+
+    filtered_files = files
+
+    if search:
+        search_words = search.lower().split()
+
+        filtered_files = [
+            f for f in files
+            if all(word in f.lower() for word in search_words)
+        ]
+
+    if not filtered_files:
+        st.warning("No matching file found.")
+        return
+
+    st.success(f"Found {len(filtered_files)} matching file(s).")
+
+    selected_file = st.selectbox(
+        "Choose file",
+        filtered_files
+    )
+
+    file_path = os.path.join(cert_folder, selected_file)
+
+    st.write("Selected file:")
+    st.code(selected_file)
+
+    with open(file_path, "rb") as f:
+        file_bytes = f.read()
+
+    mime_type = "application/octet-stream"
+
+    if selected_file.lower().endswith(".pdf"):
+        mime_type = "application/pdf"
+    elif selected_file.lower().endswith(".docx"):
+        mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    elif selected_file.lower().endswith(".png"):
+        mime_type = "image/png"
+    elif selected_file.lower().endswith((".jpg", ".jpeg")):
+        mime_type = "image/jpeg"
+
+    st.download_button(
+        download_label,
+        file_bytes,
+        file_name=selected_file,
+        mime=mime_type
+    )
+
+    if selected_file.lower().endswith((".png", ".jpg", ".jpeg")):
+        st.image(file_path, caption=selected_file)
+
+    if selected_file.lower().endswith(".pdf"):
+        st.markdown("### PDF Preview")
+
+        base64_pdf = base64.b64encode(file_bytes).decode("utf-8")
+
+        st.markdown(
+            f"""
+            <a href="data:application/pdf;base64,{base64_pdf}"
+               target="_blank"
+               style="
+                   display:inline-block;
+                   background:#1e3a8a;
+                   color:white;
+                   padding:12px 20px;
+                   border-radius:10px;
+                   text-decoration:none;
+                   font-weight:700;
+               ">
+               Open PDF Preview in New Tab
+            </a>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.info("Chrome blocks embedded PDF preview in Streamlit. Click the button above to preview before downloading.")
+
+    if selected_file.lower().endswith(".docx"):
+        st.info("Word document preview is not supported inside Streamlit. Please download the file to view.")
+
+
 # =====================
 # SIDEBAR NAVIGATION
 # =====================
@@ -461,7 +573,7 @@ if page == "🏠 Dashboard":
         if st.button("Open Risk Assessment", key="open_ra"):
             go_to_page("⚠️ Risk Assessment Pro")
 
-    st.markdown("### Coming Modules")
+    st.markdown("### Certificate / Records Modules")
     col4, col5, col6 = st.columns(3)
 
     with col4:
@@ -478,6 +590,17 @@ if page == "🏠 Dashboard":
     with col5:
         st.markdown("""
         <div class="dashboard-card">
+            <h3>👷 Worker Training Certificate</h3>
+            <p>Search, preview and download worker training certificates uploaded in GitHub.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        if st.button("Open Worker Training Certificate", key="open_worker_cert"):
+            go_to_page("👷 Worker Training Certificate")
+
+    with col6:
+        st.markdown("""
+        <div class="dashboard-card">
             <h3>⏰ Expiry Alerts</h3>
             <p>Check expired and expiring lifting gear certificates.</p>
         </div>
@@ -486,7 +609,10 @@ if page == "🏠 Dashboard":
         if st.button("Open Expiry Alerts", key="open_expiry"):
             go_to_page("⏰ Expiry Alerts")
 
-    with col6:
+    st.markdown("### System")
+    col7, col8, col9 = st.columns(3)
+
+    with col7:
         st.markdown("""
         <div class="dashboard-card">
             <h3>⚙️ Settings</h3>
@@ -888,7 +1014,7 @@ Return JSON only:
         except Exception as e:
             st.error("Lifting Plan generation failed")
             st.exception(e)
-        
+
 
 # ======================================================
 # RISK ASSESSMENT PRO
@@ -1049,96 +1175,28 @@ Schema:
 # LIFTING GEAR REGISTER
 # ======================================================
 if page == "🧰 Lifting Gear Register":
-    st.markdown("## 🧰 Lifting Gear Register")
-    st.info("Certificates loaded from GitHub folder: Lifting Gears Certificate")
+    certificate_browser(
+        folder_name="Lifting Gears Certificate",
+        title="🧰 Lifting Gear Register",
+        info_text="Certificates loaded from GitHub folder: Lifting Gears Certificate",
+        search_label="Search by SWL / keyword",
+        search_placeholder="Example: 3 Ton, 10 Ton, shackle, round sling",
+        download_label="Download Selected Certificate"
+    )
 
-    CERT_FOLDER = os.path.join(BASE_DIR, "Lifting Gears Certificate")
 
-    if not os.path.exists(CERT_FOLDER):
-        st.error("Folder not found: Lifting Gears Certificate")
-        st.code("Lifting Gears Certificate")
-    else:
-        files = [
-            f for f in os.listdir(CERT_FOLDER)
-            if f.lower().endswith((".pdf", ".png", ".jpg", ".jpeg"))
-        ]
-
-        files = sorted(files)
-
-        if not files:
-            st.warning("No certificate files found inside Lifting Gears Certificate folder.")
-        else:
-            st.success(f"Found {len(files)} certificate file(s).")
-
-            search = st.text_input(
-                "Search by SWL / keyword",
-                "",
-                placeholder="Example: 3 Ton, 10 Ton, shackle, round sling"
-            )
-
-            filtered_files = files
-
-            if search:
-                search_words = search.lower().split()
-
-                filtered_files = [
-                    f for f in files
-                    if all(word in f.lower() for word in search_words)
-                ]
-
-            if not filtered_files:
-                st.warning("No matching certificate found.")
-            else:
-                st.success(f"Found {len(filtered_files)} matching certificate(s).")
-
-                selected_file = st.selectbox(
-                    "Choose from similar certificates",
-                    filtered_files
-                )
-
-                file_path = os.path.join(CERT_FOLDER, selected_file)
-
-                st.write("Selected file:")
-                st.code(selected_file)
-
-                with open(file_path, "rb") as f:
-                    file_bytes = f.read()
-
-                st.download_button(
-                    "Download Selected Certificate",
-                    file_bytes,
-                    file_name=selected_file,
-                    mime="application/pdf"
-                )
-
-                if selected_file.lower().endswith((".png", ".jpg", ".jpeg")):
-                    st.image(file_path, caption=selected_file)
-
-                if selected_file.lower().endswith(".pdf"):
-                    st.markdown("### PDF Preview")
-
-                    base64_pdf = base64.b64encode(file_bytes).decode("utf-8")
-
-                    st.markdown(
-                        f"""
-                        <a href="data:application/pdf;base64,{base64_pdf}"
-                           target="_blank"
-                           style="
-                               display:inline-block;
-                               background:#1e3a8a;
-                               color:white;
-                               padding:12px 20px;
-                               border-radius:10px;
-                               text-decoration:none;
-                               font-weight:700;
-                           ">
-                           Open PDF Preview in New Tab
-                        </a>
-                        """,
-                        unsafe_allow_html=True
-                    )
-
-                    st.info("Chrome blocks embedded PDF preview in Streamlit. Click the button above to preview before downloading.")
+# ======================================================
+# WORKER TRAINING CERTIFICATE
+# ======================================================
+if page == "👷 Worker Training Certificate":
+    certificate_browser(
+        folder_name="Worker Training Certificate",
+        title="👷 Worker Training Certificate",
+        info_text="Certificates loaded from GitHub folder: Worker Training Certificate",
+        search_label="Search by worker name / course / keyword",
+        search_placeholder="Example: Ibrahim, forklift, boom lift, lifting supervisor, rigger",
+        download_label="Download Selected Worker Certificate"
+    )
 
 
 # ======================================================
@@ -1233,7 +1291,6 @@ if page == "⏰ Expiry Alerts":
             expired = [r for r in records if r["Status"] == "Expired"]
             expiring = [r for r in records if r["Status"] == "Expiring Soon"]
             valid = [r for r in records if r["Status"] == "Valid"]
-            unknown = [r for r in records if r["Status"] == "Unknown"]
 
             st.metric("Expired", len(expired))
             st.metric("Expiring Soon", len(expiring))
