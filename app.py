@@ -36,6 +36,9 @@ PAGES = [
 if "page" not in st.session_state:
     st.session_state.page = "🏠 Dashboard"
 
+if "sidebar_page" not in st.session_state:
+    st.session_state.sidebar_page = st.session_state.page
+
 # =====================
 # PREMIUM UI STYLE
 # =====================
@@ -168,14 +171,14 @@ LP_TEMPLATE = os.path.join(BASE_DIR, "Templates", "Lifting Plan Template.docx")
 # =====================
 def go_to_page(page_name):
     st.session_state.page = page_name
+    st.session_state.sidebar_page = page_name
     st.rerun()
 
 
 def replace_all(doc, data):
     """
     Improved Word placeholder replacement.
-    This replaces text inside normal paragraphs, tables, nested tables,
-    headers and footers.
+    Replaces text inside paragraphs, tables, nested tables, headers and footers.
     """
     def replace_in_paragraph(paragraph, replacements):
         if not paragraph.runs:
@@ -561,10 +564,14 @@ with st.sidebar:
     selected_page = st.radio(
         "Navigation",
         PAGES,
-        index=PAGES.index(st.session_state.page)
+        index=PAGES.index(st.session_state.page),
+        key="sidebar_page"
     )
 
-    st.session_state.page = selected_page
+    if selected_page != st.session_state.page:
+        st.session_state.page = selected_page
+        st.rerun()
+
     page = st.session_state.page
 
     st.markdown("---")
