@@ -172,18 +172,58 @@ def go_to_page(page_name):
 
 
 def replace_all(doc, data):
-    for p in doc.paragraphs:
-        for k, v in data.items():
-            if k in p.text:
-                p.text = p.text.replace(k, str(v))
+    """
+    Improved Word placeholder replacement.
+    This replaces text inside normal paragraphs, tables, nested tables,
+    headers and footers.
+    """
+    def replace_in_paragraph(paragraph, replacements):
+        if not paragraph.runs:
+            return
 
-    for table in doc.tables:
+        full_text = "".join(run.text for run in paragraph.runs)
+        original_text = full_text
+
+        for k, v in replacements.items():
+            full_text = full_text.replace(k, str(v))
+
+        if full_text != original_text:
+            for run in paragraph.runs:
+                run.text = ""
+
+            paragraph.runs[0].text = full_text
+
+    def replace_in_table(table, replacements):
         for row in table.rows:
             for cell in row.cells:
-                for p in cell.paragraphs:
-                    for k, v in data.items():
-                        if k in p.text:
-                            p.text = p.text.replace(k, str(v))
+                for paragraph in cell.paragraphs:
+                    replace_in_paragraph(paragraph, replacements)
+
+                for nested_table in cell.tables:
+                    replace_in_table(nested_table, replacements)
+
+    for paragraph in doc.paragraphs:
+        replace_in_paragraph(paragraph, data)
+
+    for table in doc.tables:
+        replace_in_table(table, data)
+
+    for section in doc.sections:
+        for paragraph in section.header.paragraphs:
+            replace_in_paragraph(paragraph, data)
+
+        for table in section.header.tables:
+            replace_in_table(table, data)
+
+        for paragraph in section.footer.paragraphs:
+            replace_in_paragraph(paragraph, data)
+
+        for table in section.footer.tables:
+            replace_in_table(table, data)
+
+
+def tick(value):
+    return "☑" if value else "☐"
 
 
 def clean_ms_text(text):
@@ -798,7 +838,7 @@ if page == "🏗️ Lifting Plan":
         lg_expiry = st.text_input("Expiry Date of Lifting Gear Certificate", key="lg_expiry")
 
     with st.expander("4. Means of Communication", expanded=True):
-        operator_can_see_yes = st.checkbox("Operator Can See Loading / Unloading Position - Yes", value=False, key="operator_can_see_yes")
+        operator_can_see_yes = st.checkbox("Operator Can See Loading / Unloading Position - Yes", value=True, key="operator_can_see_yes")
         operator_can_see_no = st.checkbox("Operator Can See Loading / Unloading Position - No", value=False, key="operator_can_see_no")
 
         comm_standard = st.checkbox("Standard Hand Signals", value=True, key="comm_standard")
@@ -814,19 +854,19 @@ if page == "🏗️ Lifting Plan":
         rigger_2 = st.text_input("Rigger / Signalman 2", "Rahman / Malik / Sarawanan / Sing Kwok Liang", key="rigger_2")
 
     with st.expander("6. Physical and Environmental Considerations", expanded=True):
-        ground_safe_yes = st.checkbox("Ground Made Safe - Yes", value=False, key="ground_safe_yes")
+        ground_safe_yes = st.checkbox("Ground Made Safe - Yes", value=True, key="ground_safe_yes")
         ground_safe_no = st.checkbox("Ground Made Safe - No", value=False, key="ground_safe_no")
 
-        outriggers_yes = st.checkbox("Outriggers Evenly Extended - Yes", value=False, key="outriggers_yes")
+        outriggers_yes = st.checkbox("Outriggers Evenly Extended - Yes", value=True, key="outriggers_yes")
         outriggers_no = st.checkbox("Outriggers Evenly Extended - No", value=False, key="outriggers_no")
 
         overhead_obstacle_yes = st.checkbox("Overhead Obstacles - Yes", value=False, key="overhead_obstacle_yes")
-        overhead_obstacle_no = st.checkbox("Overhead Obstacles - No", value=False, key="overhead_obstacle_no")
+        overhead_obstacle_no = st.checkbox("Overhead Obstacles - No", value=True, key="overhead_obstacle_no")
 
         obstruction_yes = st.checkbox("Structure / Equipment / Materials Obstruction - Yes", value=False, key="obstruction_yes")
-        obstruction_no = st.checkbox("Structure / Equipment / Materials Obstruction - No", value=False, key="obstruction_no")
+        obstruction_no = st.checkbox("Structure / Equipment / Materials Obstruction - No", value=True, key="obstruction_no")
 
-        lighting_yes = st.checkbox("Lighting Adequate - Yes", value=False, key="lighting_yes")
+        lighting_yes = st.checkbox("Lighting Adequate - Yes", value=True, key="lighting_yes")
         lighting_no = st.checkbox("Lighting Adequate - No", value=False, key="lighting_no")
 
         barricade_yes = st.checkbox("Zone Barricaded / Demarcated - Yes", value=True, key="barricade_yes")
@@ -928,18 +968,21 @@ Return JSON only:
                     "{{machine_dimension}}": lp_machine_dimension,
                     "{{machine_weight}}": lp_machine_weight,
 
-                    "{{known_weight_checked}}": "☒" if weight_known else "☐",
-                    "{{estimated_weight_checked}}": "☒" if weight_estimated else "☐",
+                    # New revised template placeholders
+                    "{{kw}}": tick(weight_known),
+                    "{{ew}}": tick(weight_estimated),
 
-                    "{{center_gravity_obvious}}": "☒" if cg_obvious else "☐",
-                    "{{center_gravity_estimated}}": "☒" if cg_estimated else "☐",
-                    "{{center_gravity_drawing}}": "☒" if cg_drawing else "☐",
+                    "{{obv}}": tick(cg_obvious),
+                    "{{Est}}": tick(cg_estimated),
+                    "{{est}}": tick(cg_estimated),
+                    "{{ddw}}": tick(cg_drawing),
 
-                    "{{mobile_crane_checked}}": "☒" if mobile_crane else "☐",
-                    "{{lorry_loader_checked}}": "☒" if lorry_loader else "☐",
+                    "{{mob_cr}}": tick(mobile_crane),
+                    "{{lor_cr}}": tick(lorry_loader),
 
-                    "{{crane_name}}": crane_name,
                     "{{Crane_lm}}": crane_name,
+                    "{{crane_lm}}": crane_name,
+                    "{{crane_name}}": crane_name,
                     "{{crane_renew}}": crane_renew,
                     "{{crane_expiry}}": crane_expiry,
                     "{{crane_swl}}": crane_swl,
@@ -951,16 +994,17 @@ Return JSON only:
                     "{{lg_weight}}": lg_weight,
                     "{{lifting_gear_wt}}": lg_weight,
                     "{{total_swl_lg}}": total_swl_lg,
-                    "{{lg_cert_yes}}": "☒" if lg_cert_yes else "☐",
-                    "{{lg_cert_no}}": "☒" if lg_cert_no else "☐",
+
+                    "{{c_lg_y}}": tick(lg_cert_yes),
+                    "{{c_lg_n}}": tick(lg_cert_no),
                     "{{lg_expiry}}": lg_expiry,
 
-                    "{{operator_can_see_yes}}": "☒" if operator_can_see_yes else "☐",
-                    "{{operator_can_see_no}}": "☒" if operator_can_see_no else "☐",
+                    "{{coms_y}}": tick(operator_can_see_yes),
+                    "{{coms_n}}": tick(operator_can_see_no),
 
-                    "{{comm_standard}}": "☒" if comm_standard else "☐",
-                    "{{comm_radio}}": "☒" if comm_radio else "☐",
-                    "{{comm_others}}": "☒" if comm_others else "☐",
+                    "{{comm_standard}}": tick(comm_standard),
+                    "{{comm_radio}}": tick(comm_radio),
+                    "{{comm_others}}": tick(comm_others),
                     "{{comm_others_text}}": comm_others_text,
 
                     "{{site_supervisor}}": site_supervisor,
@@ -969,24 +1013,26 @@ Return JSON only:
                     "{{rigger_1}}": rigger_1,
                     "{{rigger_2}}": rigger_2,
 
-                    "{{ground_safe_yes}}": "☒" if ground_safe_yes else "☐",
-                    "{{ground_safe_no}}": "☒" if ground_safe_no else "☐",
-                    "{{outriggers_yes}}": "☒" if outriggers_yes else "☐",
-                    "{{outriggers_no}}": "☒" if outriggers_no else "☐",
-                    "{{obstacles_yes}}": "☒" if overhead_obstacle_yes else "☐",
-                    "{{obstacles_no}}": "☒" if overhead_obstacle_no else "☐",
-                    "{{obstruction_yes}}": "☒" if obstruction_yes else "☐",
-                    "{{obstruction_no}}": "☒" if obstruction_no else "☐",
-                    "{{lighting_yes}}": "☒" if lighting_yes else "☐",
-                    "{{lighting_no}}": "☒" if lighting_no else "☐",
-                    "{{barricade_yes}}": "☒" if barricade_yes else "☐",
-                    "{{barricade_no}}": "☒" if barricade_no else "☐",
+                    "{{gc_y}}": tick(ground_safe_yes),
+                    "{{gc_n}}": tick(ground_safe_no),
+                    "{{go_y}}": tick(outriggers_yes),
+                    "{{go_n}}": tick(outriggers_no),
+                    "{{ob_y}}": tick(overhead_obstacle_yes),
+                    "{{ob_n}}": tick(overhead_obstacle_no),
+                    "{{st_y}}": tick(obstruction_yes),
+                    "{{st_n}}": tick(obstruction_no),
+                    "{{li_y}}": tick(lighting_yes),
+                    "{{li_n}}": tick(lighting_no),
+                    "{{de_y}}": tick(barricade_yes),
+                    "{{de_n}}": tick(barricade_no),
                     "{{other_precautions}}": other_precautions,
 
                     "{{task_sequence}}": task_sequence,
+                    "{{tasks}}": task_sequence,
                     "{{lifting_method}}": data["lifting_method"],
                     "{{safety_controls}}": data["safety_controls"],
                     "{{person_in_charge}}": person_in_charge,
+                    "{{task_pic}}": person_in_charge,
 
                     "{{applied_by}}": applied_by,
                     "{{applied_designation}}": applied_designation,
@@ -995,7 +1041,32 @@ Return JSON only:
                     "{{assessed_by}}": assessed_by,
                     "{{assessed_designation}}": assessed_designation,
                     "{{approved_by}}": approved_by,
-                    "{{approved_designation}}": approved_designation
+                    "{{approved_designation}}": approved_designation,
+
+                    # Old placeholder support, safe to keep
+                    "{{known_weight_checked}}": tick(weight_known),
+                    "{{estimated_weight_checked}}": tick(weight_estimated),
+                    "{{center_gravity_obvious}}": tick(cg_obvious),
+                    "{{center_gravity_estimated}}": tick(cg_estimated),
+                    "{{center_gravity_drawing}}": tick(cg_drawing),
+                    "{{mobile_crane_checked}}": tick(mobile_crane),
+                    "{{lorry_loader_checked}}": tick(lorry_loader),
+                    "{{lg_cert_yes}}": tick(lg_cert_yes),
+                    "{{lg_cert_no}}": tick(lg_cert_no),
+                    "{{operator_can_see_yes}}": tick(operator_can_see_yes),
+                    "{{operator_can_see_no}}": tick(operator_can_see_no),
+                    "{{ground_safe_yes}}": tick(ground_safe_yes),
+                    "{{ground_safe_no}}": tick(ground_safe_no),
+                    "{{outriggers_yes}}": tick(outriggers_yes),
+                    "{{outriggers_no}}": tick(outriggers_no),
+                    "{{obstacles_yes}}": tick(overhead_obstacle_yes),
+                    "{{obstacles_no}}": tick(overhead_obstacle_no),
+                    "{{obstruction_yes}}": tick(obstruction_yes),
+                    "{{obstruction_no}}": tick(obstruction_no),
+                    "{{lighting_yes}}": tick(lighting_yes),
+                    "{{lighting_no}}": tick(lighting_no),
+                    "{{barricade_yes}}": tick(barricade_yes),
+                    "{{barricade_no}}": tick(barricade_no),
                 })
 
                 format_risk_assessment(doc)
@@ -1237,8 +1308,8 @@ if page == "⏰ Expiry Alerts":
                 found_date = None
 
                 patterns = [
-                    r"(\d{4})[-_\.](\d{1,2})[-_\.](\d{1,2})",
-                    r"(\d{1,2})[-_\.](\d{1,2})[-_\.](\d{4})",
+                    r"(\d{4})[-_\\.](\d{1,2})[-_\\.](\d{1,2})",
+                    r"(\d{1,2})[-_\\.](\d{1,2})[-_\\.](\d{4})",
                 ]
 
                 for pattern in patterns:
@@ -1308,3 +1379,64 @@ if page == "⏰ Expiry Alerts":
 if page == "⚙️ Settings":
     st.markdown("## ⚙️ Settings")
     st.info("This module can be added next: manage default names, templates and company settings.")
+
+    st.markdown("### Lifting Plan Placeholder Guide")
+
+    st.code("""
+Use these placeholders in your Lifting Plan Word template:
+
+General:
+{{project_name}}
+{{location}}
+{{operation_date}}
+{{operation_time}}
+{{validity_period}}
+
+Load:
+{{machine_name}}
+{{machine_dimension}}
+{{machine_weight}}
+{{kw}} Known weight
+{{ew}} Estimated weight
+{{obv}} Obvious
+{{Est}} Estimated
+{{ddw}} Determined by drawing
+
+Lifting Equipment:
+{{mob_cr}} Mobile crane
+{{lor_cr}} Lorry loader
+{{Crane_lm}}
+{{crane_renew}}
+{{crane_expiry}}
+{{crane_swl}}
+{{crane_radius}}
+{{crane_swl_radius}}
+{{lifting_gear}}
+{{lifting_gear_wt}}
+{{total_swl_lg}}
+{{c_lg_y}} Yes
+{{c_lg_n}} No
+{{lg_expiry}}
+
+Communication:
+{{coms_y}} Yes
+{{coms_n}} No
+
+Physical / Environmental:
+{{gc_y}} Yes    {{gc_n}} No
+{{go_y}} Yes    {{go_n}} No
+{{ob_y}} Yes    {{ob_n}} No
+{{st_y}} Yes    {{st_n}} No
+{{li_y}} Yes    {{li_n}} No
+{{de_y}} Yes    {{de_n}} No
+
+Approval:
+{{applied_by}}
+{{applied_designation}}
+{{prepared_by}}
+{{prepared_designation}}
+{{assessed_by}}
+{{assessed_designation}}
+{{approved_by}}
+{{approved_designation}}
+""")
