@@ -92,15 +92,6 @@ st.markdown("""
     color: #475569;
 }
 
-.section-title {
-    background: #f1f5f9;
-    padding: 12px 16px;
-    border-left: 5px solid #1e3a8a;
-    border-radius: 10px;
-    font-weight: 700;
-    margin-bottom: 12px;
-}
-
 .stButton > button {
     background-color: #1e3a8a;
     color: white;
@@ -976,16 +967,79 @@ Schema:
 
 
 # ======================================================
-# PLACEHOLDER MODULES
+# LIFTING GEAR REGISTER
 # ======================================================
 if page == "🧰 Lifting Gear Register":
     st.markdown("## 🧰 Lifting Gear Register")
-    st.info("This module can be added next: upload certificates, track SWL, serial number and expiry dates.")
+    st.info("Certificates loaded from GitHub folder: Lifting Gears Certificate")
 
+    CERT_FOLDER = os.path.join(BASE_DIR, "Lifting Gears Certificate")
+
+    if not os.path.exists(CERT_FOLDER):
+        st.error("Folder not found: Lifting Gears Certificate")
+        st.write("Please make sure your GitHub folder name is exactly:")
+        st.code("Lifting Gears Certificate")
+    else:
+        files = [
+            f for f in os.listdir(CERT_FOLDER)
+            if f.lower().endswith((".pdf", ".png", ".jpg", ".jpeg"))
+        ]
+
+        files = sorted(files)
+
+        if not files:
+            st.warning("No certificate files found inside Lifting Gears Certificate folder.")
+        else:
+            st.success(f"Found {len(files)} certificate file(s).")
+
+            search = st.text_input("Search certificate", "")
+
+            filtered_files = [
+                f for f in files
+                if search.lower() in f.lower()
+            ]
+
+            if not filtered_files:
+                st.warning("No matching certificate found.")
+            else:
+                selected_file = st.selectbox(
+                    "Select certificate",
+                    filtered_files
+                )
+
+                file_path = os.path.join(CERT_FOLDER, selected_file)
+
+                st.write("Selected file:")
+                st.code(selected_file)
+
+                with open(file_path, "rb") as f:
+                    file_bytes = f.read()
+
+                st.download_button(
+                    "Download Selected Certificate",
+                    file_bytes,
+                    file_name=selected_file,
+                    mime="application/pdf"
+                )
+
+                if selected_file.lower().endswith((".png", ".jpg", ".jpeg")):
+                    st.image(file_path, caption=selected_file)
+
+                if selected_file.lower().endswith(".pdf"):
+                    st.info("PDF preview is not shown here. Use the download button to open the certificate.")
+
+
+# ======================================================
+# EXPIRY ALERTS
+# ======================================================
 if page == "⏰ Expiry Alerts":
     st.markdown("## ⏰ Expiry Alerts")
     st.info("This module can be added next: show expired and expiring lifting gear certificates.")
 
+
+# ======================================================
+# SETTINGS
+# ======================================================
 if page == "⚙️ Settings":
     st.markdown("## ⚙️ Settings")
     st.info("This module can be added next: manage default names, templates and company settings.")
