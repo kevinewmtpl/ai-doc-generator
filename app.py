@@ -36,9 +36,6 @@ PAGES = [
 if "page" not in st.session_state:
     st.session_state.page = "🏠 Dashboard"
 
-if "sidebar_page" not in st.session_state:
-    st.session_state.sidebar_page = st.session_state.page
-
 # =====================
 # OPENAI CLIENT
 # =====================
@@ -366,7 +363,6 @@ st.markdown("""
 # =====================
 def go_to_page(page_name):
     st.session_state.page = page_name
-    st.session_state.sidebar_page = page_name
     st.rerun()
 
 
@@ -768,11 +764,13 @@ with st.sidebar:
     st.markdown("AI Document Control")
     st.markdown("---")
 
+    current_index = PAGES.index(st.session_state.page) if st.session_state.page in PAGES else 0
+
     selected_page = st.radio(
         "Navigation",
         PAGES,
-        index=PAGES.index(st.session_state.page),
-        key="sidebar_page"
+        index=current_index,
+        key="sidebar_navigation"
     )
 
     if selected_page != st.session_state.page:
@@ -1307,6 +1305,7 @@ Return JSON only:
 
                     "{{kw}}": tick(weight_known),
                     "{{ew}}": tick(weight_estimated),
+
                     "{{obv}}": tick(cg_obvious),
                     "{{Est}}": tick(cg_estimated),
                     "{{est}}": tick(cg_estimated),
@@ -1327,6 +1326,7 @@ Return JSON only:
                     "{{ crane_radius }}": safe_text(crane_radius),
                     "{{crane_radius }}": safe_text(crane_radius),
                     "{{ crane_radius}}": safe_text(crane_radius),
+
                     "{{crane_swl_radius}}": safe_text(crane_swl_radius),
 
                     "{{lifting_gear}}": safe_text(lifting_gear_manual),
@@ -1344,6 +1344,7 @@ Return JSON only:
 
                     "{{shs}}": tick(comm_standard),
                     "{{rad}}": tick(comm_radio),
+
                     "{{comm_standard}}": tick(comm_standard),
                     "{{comm_radio}}": tick(comm_radio),
                     "{{comm_others}}": tick(comm_others),
@@ -1618,7 +1619,6 @@ if page == "⏰ Expiry Alerts":
     st.markdown("## ⏰ Expiry Alerts")
     st.caption("Show expired and expiring lifting gear certificates from your GitHub folder.")
 
-    from datetime import timedelta
     import re
 
     CERT_FOLDER = os.path.join(BASE_DIR, "Lifting Gears Certificate")
