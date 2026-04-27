@@ -1,9 +1,11 @@
 import os
 import json
+import base64
 from io import BytesIO
 from datetime import date
 
 import streamlit as st
+import streamlit.components.v1 as components
 from openai import OpenAI
 from docx import Document
 from docx.shared import Pt
@@ -1036,7 +1038,20 @@ if page == "🧰 Lifting Gear Register":
                     st.image(file_path, caption=selected_file)
 
                 if selected_file.lower().endswith(".pdf"):
-                    st.info("PDF preview is not shown here. Use the download button to open the certificate.")
+                    st.markdown("### PDF Preview")
+
+                    base64_pdf = base64.b64encode(file_bytes).decode("utf-8")
+
+                    pdf_display = f"""
+                    <iframe
+                        src="data:application/pdf;base64,{base64_pdf}"
+                        width="100%"
+                        height="900px"
+                        style="border: 1px solid #ddd; border-radius: 10px;">
+                    </iframe>
+                    """
+
+                    components.html(pdf_display, height=920)
 
 
 # ======================================================
