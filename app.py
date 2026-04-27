@@ -852,37 +852,6 @@ if page == "🏠 Dashboard":
         </div>
         """, unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">Certificate Status</div>', unsafe_allow_html=True)
-
-    s1, s2, s3 = st.columns(3)
-
-    with s1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-label">Expired</div>
-            <div class="metric-value">{expired_count}</div>
-            <div class="metric-small">Past expiry date</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with s2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-label">Expiring Soon</div>
-            <div class="metric-value">{expiring_soon_count}</div>
-            <div class="metric-small">Within next 30 days</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with s3:
-        st.markdown(f"""
-        <div class="metric-card">
-            <div class="metric-label">Valid</div>
-            <div class="metric-value">{valid_count}</div>
-            <div class="metric-small">More than 30 days remaining</div>
-        </div>
-        """, unsafe_allow_html=True)
-
     st.markdown('<div class="section-title">Document Modules</div>', unsafe_allow_html=True)
 
     def dashboard_card(title, desc, image_b64, tag):
