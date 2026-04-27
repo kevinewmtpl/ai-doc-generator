@@ -679,13 +679,67 @@ if page == "📄 Method Statement":
     st.caption("Fill in the work details and generate a Word method statement.")
 
     with st.expander("Project Details", expanded=True):
-        ms_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ms_company")
-        ms_project_name = st.text_input("Project Name", key="ms_project_name")
-        ms_date_input = st.date_input("Date", value=date.today(), key="ms_date_input")
-        ms_description = st.text_area("Description of Work", key="ms_description")
-        ms_machine = st.text_input("Machine Model, Dimension and Weight", key="ms_machine")
-        ms_operation_time = st.text_input("Operation Date & Time", key="ms_operation_time")
-        ms_location = st.text_input("Location of Operation", key="ms_location")
+        ms_company = st.text_input(
+            "Company",
+            "Eric Wong Machinery Transportation Pte Ltd",
+            key="ms_company"
+        )
+
+        ms_project_name = st.text_input(
+            "Project Name",
+            key="ms_project_name"
+        )
+
+        ms_date_input = st.date_input(
+            "Date",
+            value=date.today(),
+            key="ms_date_input"
+        )
+
+        ms_description = st.text_area(
+            "Description of Work",
+            key="ms_description"
+        )
+
+        ms_machine = st.text_input(
+            "Machine Model, Dimension and Weight",
+            key="ms_machine"
+        )
+
+        ms_operation_time = st.text_input(
+            "Operation Date & Time",
+            key="ms_operation_time"
+        )
+
+        ms_location = st.text_input(
+            "Location of Operation",
+            key="ms_location"
+        )
+
+    with st.expander("Standard Site Information", expanded=True):
+        ms_obstacles = st.text_area(
+            "Obstacles",
+            value="Clear obstruction in way of working area and route to machine position.\nBarricade operation area to prevent persons who are not involved from entering unintentionally.",
+            key="ms_obstacles"
+        )
+
+        ms_environment = st.text_area(
+            "Environment",
+            value="No operation will be carried out during heavy rain, thunderstorms and lightning weather.\nAll debris will be cleared and disposed.",
+            key="ms_environment"
+        )
+
+        ms_lifting_crew = st.text_area(
+            "Lifting Crew",
+            value="MOM certified lifting supervisor, rigger, signalman and lorry loader operator will be involved in this operation.",
+            key="ms_lifting_crew"
+        )
+
+        ms_prepared_by = st.text_input(
+            "Prepared By",
+            value="Kevin Wong / Zailani",
+            key="ms_prepared_by"
+        )
 
     generate_ms = st.button("📄 Generate Method Statement", key="generate_ms")
 
@@ -700,6 +754,9 @@ Project: {ms_project_name}
 Location: {ms_location}
 Description: {ms_description}
 Machine: {ms_machine}
+Obstacles / Site Access: {ms_obstacles}
+Environment: {ms_environment}
+Lifting Crew: {ms_lifting_crew}
 
 Rules:
 - Use formal contractor wording.
@@ -755,6 +812,7 @@ job_scope
 
                 replace_all(doc, {
                     "{{company}}": ms_company,
+                    "{{project_name}}": ms_project_name,
                     "{{date}}": str(ms_date_input),
                     "{{location}}": ms_location,
                     "{{description_of_work}}": ms_description,
@@ -762,13 +820,13 @@ job_scope
                     "{{equipment}}": data["equipment"],
                     "{{safety_aspect}}": data["safety_aspect"],
                     "{{job_scope}}": data["job_scope"],
-                    "{{risk_assessment_note}}": "A copy of Risk Assessment will be attached",
+                    "{{risk_assessment_note}}": "Refer as attached",
                     "{{operation_date}}": str(ms_date_input),
-                    "{{operation_time}}": ms_operation_time if ms_operation_time else "To be confirmed",
-                    "{{obstacles}}": "To be confirmed",
-                    "{{environment}}": "To be confirmed",
-                    "{{lifting_crew}}": "To be confirmed",
-                    "{{prepared_by}}": "Kevin Wong / Zailani",
+                    "{{operation_time}}": ms_operation_time,
+                    "{{obstacles}}": ms_obstacles,
+                    "{{environment}}": ms_environment,
+                    "{{lifting_crew}}": ms_lifting_crew,
+                    "{{prepared_by}}": ms_prepared_by,
                 })
 
                 format_method_statement(doc)
@@ -975,7 +1033,6 @@ Return JSON only:
                     "{{machine_dimension}}": lp_machine_dimension,
                     "{{machine_weight}}": lp_machine_weight,
 
-                    # New revised template placeholders
                     "{{kw}}": tick(weight_known),
                     "{{ew}}": tick(weight_estimated),
 
@@ -1050,7 +1107,6 @@ Return JSON only:
                     "{{approved_by}}": approved_by,
                     "{{approved_designation}}": approved_designation,
 
-                    # Old placeholder support, safe to keep
                     "{{known_weight_checked}}": tick(weight_known),
                     "{{estimated_weight_checked}}": tick(weight_estimated),
                     "{{center_gravity_obvious}}": tick(cg_obvious),
@@ -1386,6 +1442,26 @@ if page == "⏰ Expiry Alerts":
 if page == "⚙️ Settings":
     st.markdown("## ⚙️ Settings")
     st.info("This module can be added next: manage default names, templates and company settings.")
+
+    st.markdown("### Method Statement Placeholder Guide")
+
+    st.code("""
+Use these placeholders in your Method Statement Word template:
+
+{{date}}
+{{description_of_work}}
+{{machine_spec}}
+{{operation_date}}
+{{operation_time}}
+{{location}}
+{{equipment}}
+{{obstacles}}
+{{environment}}
+{{lifting_crew}}
+{{safety_aspect}}
+{{job_scope}}
+{{prepared_by}}
+""")
 
     st.markdown("### Lifting Plan Placeholder Guide")
 
