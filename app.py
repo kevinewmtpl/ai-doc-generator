@@ -36,9 +36,6 @@ PAGES = [
 if "page" not in st.session_state:
     st.session_state.page = "🏠 Dashboard"
 
-if "sidebar_page" not in st.session_state:
-    st.session_state.sidebar_page = st.session_state.page
-
 # =====================
 # OPENAI CLIENT
 # =====================
@@ -366,16 +363,10 @@ st.markdown("""
 # =====================
 def go_to_page(page_name):
     st.session_state.page = page_name
-    st.session_state.sidebar_page = page_name
     st.rerun()
 
 
 def replace_all(doc, data):
-    """
-    Improved Word placeholder replacement.
-    Replaces text inside paragraphs, tables, nested tables, headers and footers.
-    Keeps the template formatting as much as python-docx allows.
-    """
     def replace_in_paragraph(paragraph, replacements):
         if not paragraph.runs:
             return
@@ -456,10 +447,6 @@ def clean_ms_text(text):
 
 
 def format_method_statement(doc):
-    """
-    Kept for future use, but NOT called now.
-    This function changes fonts, so it is disabled in generation.
-    """
     headings = [
         "METHOD OF STATEMENT",
         "Description of work",
@@ -522,10 +509,6 @@ def set_ra_cell_text(cell, text):
 
 
 def format_risk_assessment(doc):
-    """
-    Used only for Risk Assessment document.
-    Do not use this for Lifting Plan if you want to keep template font.
-    """
     for para in doc.paragraphs:
         for run in para.runs:
             run.font.name = "Times New Roman"
@@ -768,11 +751,13 @@ with st.sidebar:
     st.markdown("AI Document Control")
     st.markdown("---")
 
+    current_index = PAGES.index(st.session_state.page) if st.session_state.page in PAGES else 0
+
     selected_page = st.radio(
         "Navigation",
         PAGES,
-        index=PAGES.index(st.session_state.page),
-        key="sidebar_page"
+        index=current_index,
+        key="sidebar_navigation"
     )
 
     if selected_page != st.session_state.page:
@@ -953,42 +938,13 @@ if page == "📄 Method Statement":
     st.caption("Fill in the work details and generate a Word method statement.")
 
     with st.expander("Project Details", expanded=True):
-        ms_company = st.text_input(
-            "Company",
-            "Eric Wong Machinery Transportation Pte Ltd",
-            key="ms_company"
-        )
-
-        ms_project_name = st.text_input(
-            "Project Name",
-            key="ms_project_name"
-        )
-
-        ms_date_input = st.date_input(
-            "Date",
-            value=date.today(),
-            key="ms_date_input"
-        )
-
-        ms_description = st.text_area(
-            "Description of Work",
-            key="ms_description"
-        )
-
-        ms_machine = st.text_input(
-            "Machine Model, Dimension and Weight",
-            key="ms_machine"
-        )
-
-        ms_operation_time = st.text_input(
-            "Operation Date & Time",
-            key="ms_operation_time"
-        )
-
-        ms_location = st.text_input(
-            "Location of Operation",
-            key="ms_location"
-        )
+        ms_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ms_company")
+        ms_project_name = st.text_input("Project Name", key="ms_project_name")
+        ms_date_input = st.date_input("Date", value=date.today(), key="ms_date_input")
+        ms_description = st.text_area("Description of Work", key="ms_description")
+        ms_machine = st.text_input("Machine Model, Dimension and Weight", key="ms_machine")
+        ms_operation_time = st.text_input("Operation Date & Time", key="ms_operation_time")
+        ms_location = st.text_input("Location of Operation", key="ms_location")
 
     with st.expander("Standard Site Information", expanded=True):
         ms_obstacles = st.text_area(
@@ -1009,11 +965,7 @@ if page == "📄 Method Statement":
             key="ms_lifting_crew"
         )
 
-        ms_prepared_by = st.text_input(
-            "Prepared By",
-            value="Kevin Wong / Zailani",
-            key="ms_prepared_by"
-        )
+        ms_prepared_by = st.text_input("Prepared By", value="Kevin Wong / Zailani", key="ms_prepared_by")
 
     generate_ms = st.button("📄 Generate Method Statement", key="generate_ms")
 
@@ -1445,11 +1397,7 @@ if page == "⚠️ Risk Assessment Pro":
         ra_due_date_input = st.date_input("Due Date", value=date.today(), key="ra_due_date_input")
 
     with st.expander("Risk Assessment Details", expanded=True):
-        ra_process = st.text_input(
-            "RA Process",
-            "Machinery Moving / Lifting Operation",
-            key="ra_process"
-        )
+        ra_process = st.text_input("RA Process", "Machinery Moving / Lifting Operation", key="ra_process")
 
         activities = st.text_area(
             "Work Activities (1 per line)",
@@ -1618,7 +1566,6 @@ if page == "⏰ Expiry Alerts":
     st.markdown("## ⏰ Expiry Alerts")
     st.caption("Show expired and expiring lifting gear certificates from your GitHub folder.")
 
-    from datetime import timedelta
     import re
 
     CERT_FOLDER = os.path.join(BASE_DIR, "Lifting Gears Certificate")
@@ -1660,17 +1607,9 @@ if page == "⏰ Expiry Alerts":
                             parts = match.groups()
 
                             if len(parts[0]) == 4:
-                                found_date = date(
-                                    int(parts[0]),
-                                    int(parts[1]),
-                                    int(parts[2])
-                                )
+                                found_date = date(int(parts[0]), int(parts[1]), int(parts[2]))
                             else:
-                                found_date = date(
-                                    int(parts[2]),
-                                    int(parts[1]),
-                                    int(parts[0])
-                                )
+                                found_date = date(int(parts[2]), int(parts[1]), int(parts[0]))
 
                             break
                         except Exception:
