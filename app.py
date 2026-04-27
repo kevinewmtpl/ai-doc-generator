@@ -193,7 +193,6 @@ def replace_all(doc, data):
         if full_text != original_text:
             for run in paragraph.runs:
                 run.text = ""
-
             paragraph.runs[0].text = full_text
 
     def replace_in_table(table, replacements):
@@ -227,6 +226,10 @@ def replace_all(doc, data):
 
 def tick(value):
     return "☑" if value else "☐"
+
+
+def safe_text(value):
+    return "" if value is None else str(value)
 
 
 def clean_ms_text(text):
@@ -1018,20 +1021,22 @@ Return JSON only:
                 data = json.loads(response.output_text)
                 doc = Document(LP_TEMPLATE)
 
-                replace_all(doc, {
-                    "{{company}}": lp_company,
-                    "{{project_name}}": lp_project_name,
-                    "{{location}}": lp_location,
+                replacements = {
+                    # General
+                    "{{company}}": safe_text(lp_company),
+                    "{{project_name}}": safe_text(lp_project_name),
+                    "{{location}}": safe_text(lp_location),
                     "{{date}}": str(lp_date_input),
                     "{{operation_date}}": str(lp_date_input),
-                    "{{operation_time}}": lp_operation_time,
-                    "{{validity_period}}": lp_validity,
+                    "{{operation_time}}": safe_text(lp_operation_time),
+                    "{{validity_period}}": safe_text(lp_validity),
 
-                    "{{description_of_work}}": lp_description,
-                    "{{machine_spec}}": lp_machine,
-                    "{{machine_name}}": lp_machine,
-                    "{{machine_dimension}}": lp_machine_dimension,
-                    "{{machine_weight}}": lp_machine_weight,
+                    # Load
+                    "{{description_of_work}}": safe_text(lp_description),
+                    "{{machine_spec}}": safe_text(lp_machine),
+                    "{{machine_name}}": safe_text(lp_machine),
+                    "{{machine_dimension}}": safe_text(lp_machine_dimension),
+                    "{{machine_weight}}": safe_text(lp_machine_weight),
 
                     "{{kw}}": tick(weight_known),
                     "{{ew}}": tick(weight_estimated),
@@ -1041,42 +1046,55 @@ Return JSON only:
                     "{{est}}": tick(cg_estimated),
                     "{{ddw}}": tick(cg_drawing),
 
+                    # Lifting equipment
                     "{{mob_cr}}": tick(mobile_crane),
                     "{{lor_cr}}": tick(lorry_loader),
 
-                    "{{Crane_lm}}": crane_name,
-                    "{{crane_lm}}": crane_name,
-                    "{{crane_name}}": crane_name,
-                    "{{crane_renew}}": crane_renew,
-                    "{{crane_expiry}}": crane_expiry,
-                    "{{crane_swl}}": crane_swl,
-                    "{{boom_length}}": boom_length,
-                    "{{crane_radius}}": crane_radius,
-                    "{{crane_swl_radius}}": crane_swl_radius,
+                    "{{Crane_lm}}": safe_text(crane_name),
+                    "{{crane_lm}}": safe_text(crane_name),
+                    "{{crane_name}}": safe_text(crane_name),
+                    "{{crane_renew}}": safe_text(crane_renew),
+                    "{{crane_expiry}}": safe_text(crane_expiry),
+                    "{{crane_swl}}": safe_text(crane_swl),
+                    "{{boom_length}}": safe_text(boom_length),
 
-                    "{{lifting_gear}}": lifting_gear_manual,
-                    "{{lg_weight}}": lg_weight,
-                    "{{lifting_gear_wt}}": lg_weight,
-                    "{{total_swl_lg}}": total_swl_lg,
+                    "{{crane_radius}}": safe_text(crane_radius),
+                    "{{ crane_radius }}": safe_text(crane_radius),
+                    "{{crane_radius }}": safe_text(crane_radius),
+                    "{{ crane_radius}}": safe_text(crane_radius),
+
+                    "{{crane_swl_radius}}": safe_text(crane_swl_radius),
+
+                    "{{lifting_gear}}": safe_text(lifting_gear_manual),
+                    "{{lg_weight}}": safe_text(lg_weight),
+                    "{{lifting_gear_wt}}": safe_text(lg_weight),
+                    "{{total_swl_lg}}": safe_text(total_swl_lg),
 
                     "{{c_lg_y}}": tick(lg_cert_yes),
                     "{{c_lg_n}}": tick(lg_cert_no),
-                    "{{lg_expiry}}": lg_expiry,
+                    "{{lg_expiry}}": safe_text(lg_expiry),
 
+                    # Communication
                     "{{coms_y}}": tick(operator_can_see_yes),
                     "{{coms_n}}": tick(operator_can_see_no),
+
+                    # If your Word template accidentally still has {{coms}}, this will prevent coding from showing.
+                    # Better to use {{coms_y}} and {{coms_n}} in Word.
+                    "{{coms}}": tick(operator_can_see_yes),
 
                     "{{comm_standard}}": tick(comm_standard),
                     "{{comm_radio}}": tick(comm_radio),
                     "{{comm_others}}": tick(comm_others),
-                    "{{comm_others_text}}": comm_others_text,
+                    "{{comm_others_text}}": safe_text(comm_others_text),
 
-                    "{{site_supervisor}}": site_supervisor,
-                    "{{lifting_supervisor}}": lifting_supervisor,
-                    "{{equipment_operator}}": equipment_operator,
-                    "{{rigger_1}}": rigger_1,
-                    "{{rigger_2}}": rigger_2,
+                    # Personnel
+                    "{{site_supervisor}}": safe_text(site_supervisor),
+                    "{{lifting_supervisor}}": safe_text(lifting_supervisor),
+                    "{{equipment_operator}}": safe_text(equipment_operator),
+                    "{{rigger_1}}": safe_text(rigger_1),
+                    "{{rigger_2}}": safe_text(rigger_2),
 
+                    # Physical and Environmental
                     "{{gc_y}}": tick(ground_safe_yes),
                     "{{gc_n}}": tick(ground_safe_no),
                     "{{go_y}}": tick(outriggers_yes),
@@ -1089,24 +1107,27 @@ Return JSON only:
                     "{{li_n}}": tick(lighting_no),
                     "{{de_y}}": tick(barricade_yes),
                     "{{de_n}}": tick(barricade_no),
-                    "{{other_precautions}}": other_precautions,
+                    "{{other_precautions}}": safe_text(other_precautions),
 
-                    "{{task_sequence}}": task_sequence,
-                    "{{tasks}}": task_sequence,
-                    "{{lifting_method}}": data["lifting_method"],
-                    "{{safety_controls}}": data["safety_controls"],
-                    "{{person_in_charge}}": person_in_charge,
-                    "{{task_pic}}": person_in_charge,
+                    # Tasks
+                    "{{task_sequence}}": safe_text(task_sequence),
+                    "{{tasks}}": safe_text(task_sequence),
+                    "{{lifting_method}}": safe_text(data.get("lifting_method", "")),
+                    "{{safety_controls}}": safe_text(data.get("safety_controls", "")),
+                    "{{person_in_charge}}": safe_text(person_in_charge),
+                    "{{task_pic}}": safe_text(person_in_charge),
 
-                    "{{applied_by}}": applied_by,
-                    "{{applied_designation}}": applied_designation,
-                    "{{prepared_by}}": prepared_by,
-                    "{{prepared_designation}}": prepared_designation,
-                    "{{assessed_by}}": assessed_by,
-                    "{{assessed_designation}}": assessed_designation,
-                    "{{approved_by}}": approved_by,
-                    "{{approved_designation}}": approved_designation,
+                    # Approval
+                    "{{applied_by}}": safe_text(applied_by),
+                    "{{applied_designation}}": safe_text(applied_designation),
+                    "{{prepared_by}}": safe_text(prepared_by),
+                    "{{prepared_designation}}": safe_text(prepared_designation),
+                    "{{assessed_by}}": safe_text(assessed_by),
+                    "{{assessed_designation}}": safe_text(assessed_designation),
+                    "{{approved_by}}": safe_text(approved_by),
+                    "{{approved_designation}}": safe_text(approved_designation),
 
+                    # Old placeholder support
                     "{{known_weight_checked}}": tick(weight_known),
                     "{{estimated_weight_checked}}": tick(weight_estimated),
                     "{{center_gravity_obvious}}": tick(cg_obvious),
@@ -1130,8 +1151,9 @@ Return JSON only:
                     "{{lighting_no}}": tick(lighting_no),
                     "{{barricade_yes}}": tick(barricade_yes),
                     "{{barricade_no}}": tick(barricade_no),
-                })
+                }
 
+                replace_all(doc, replacements)
                 format_risk_assessment(doc)
 
                 buffer = BytesIO()
@@ -1489,6 +1511,7 @@ Lifting Equipment:
 {{mob_cr}} Mobile crane
 {{lor_cr}} Lorry loader
 {{Crane_lm}}
+{{crane_lm}}
 {{crane_renew}}
 {{crane_expiry}}
 {{crane_swl}}
