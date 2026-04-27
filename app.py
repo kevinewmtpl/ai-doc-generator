@@ -90,7 +90,7 @@ TRAINING_IMAGE = asset_image("training_certificate.jpg", "method_statement.jpg")
 EXPIRY_IMAGE = asset_image("expiry_alert.jpg", "training_certificate.jpg")
 
 # =====================
-# PROFESSIONAL MODERN INDUSTRIAL UI STYLE
+# PROFESSIONAL UI STYLE
 # =====================
 st.markdown(f"""
 <style>
@@ -111,10 +111,6 @@ st.markdown(f"""
 
 [data-testid="stSidebar"] * {{
     color: white;
-}}
-
-[data-testid="stSidebar"] .stRadio label {{
-    font-weight: 600;
 }}
 
 .ewmt-header {{
@@ -310,7 +306,6 @@ st.markdown(f"""
 .stButton > button:hover {{
     background: linear-gradient(90deg, #0f172a, #1e3a8a);
     color: white;
-    transform: translateY(-1px);
 }}
 
 .stDownloadButton > button {{
@@ -444,54 +439,6 @@ def clean_ms_text(text):
             cleaned.append(line)
 
     return "\n".join(cleaned).strip()
-
-
-def format_method_statement(doc):
-    headings = [
-        "METHOD OF STATEMENT",
-        "Description of work",
-        "Machine Spec",
-        "Risk Assessment",
-        "Date / Time of Operation",
-        "Location of Operation",
-        "Equipment Use",
-        "Obstacles",
-        "Environment",
-        "Lifting Crew",
-        "Safety Aspect",
-        "Job Scope",
-    ]
-
-    for para in doc.paragraphs:
-        txt = para.text.strip()
-
-        for run in para.runs:
-            run.font.name = "Times New Roman"
-            run._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
-
-            if txt in headings:
-                run.font.size = Pt(16)
-                run.bold = True
-                run.underline = True
-            else:
-                run.font.size = Pt(12)
-
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    txt = para.text.strip()
-
-                    for run in para.runs:
-                        run.font.name = "Times New Roman"
-                        run._element.rPr.rFonts.set(qn("w:eastAsia"), "Times New Roman")
-
-                        if txt in headings:
-                            run.font.size = Pt(16)
-                            run.bold = True
-                            run.underline = True
-                        else:
-                            run.font.size = Pt(12)
 
 
 def set_ra_cell_text(cell, text):
@@ -667,7 +614,6 @@ def certificate_browser(folder_name, title, info_text, search_label, search_plac
 
     if search:
         search_words = search.lower().split()
-
         filtered_files = [
             f for f in files
             if all(word in f.lower() for word in search_words)
@@ -679,11 +625,7 @@ def certificate_browser(folder_name, title, info_text, search_label, search_plac
 
     st.success(f"Found {len(filtered_files)} matching file(s).")
 
-    selected_file = st.selectbox(
-        "Choose file",
-        filtered_files
-    )
-
+    selected_file = st.selectbox("Choose file", filtered_files)
     file_path = os.path.join(cert_folder, selected_file)
 
     st.write("Selected file:")
@@ -715,7 +657,6 @@ def certificate_browser(folder_name, title, info_text, search_label, search_plac
 
     if selected_file.lower().endswith(".pdf"):
         st.markdown("### PDF Preview")
-
         base64_pdf = base64.b64encode(file_bytes).decode("utf-8")
 
         st.markdown(
@@ -751,16 +692,14 @@ with st.sidebar:
     st.markdown("AI Document Control")
     st.markdown("---")
 
-    current_index = PAGES.index(st.session_state.page) if st.session_state.page in PAGES else 0
-
-    selected_page = st.radio(
+    selected_page = st.selectbox(
         "Navigation",
         PAGES,
-        index=current_index,
-        key="sidebar_navigation"
+        index=PAGES.index(st.session_state.page) if st.session_state.page in PAGES else 0,
+        key="nav_selectbox"
     )
 
-    if selected_page != st.session_state.page:
+    if st.button("Go to selected module", key="nav_go_button"):
         st.session_state.page = selected_page
         st.rerun()
 
