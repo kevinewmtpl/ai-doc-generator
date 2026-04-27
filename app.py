@@ -40,112 +40,6 @@ if "sidebar_page" not in st.session_state:
     st.session_state.sidebar_page = st.session_state.page
 
 # =====================
-# PREMIUM UI STYLE
-# =====================
-st.markdown("""
-<style>
-.block-container {
-    padding-top: 1.2rem;
-    padding-bottom: 2rem;
-    max-width: 1500px;
-}
-
-[data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #0f172a, #1e293b);
-}
-
-[data-testid="stSidebar"] * {
-    color: white;
-}
-
-.ewmt-header {
-    background: linear-gradient(90deg, #0f172a, #1e3a8a);
-    padding: 26px 32px;
-    border-radius: 20px;
-    color: white;
-    margin-bottom: 22px;
-    box-shadow: 0px 6px 18px rgba(15,23,42,0.22);
-}
-
-.ewmt-title {
-    font-size: 34px;
-    font-weight: 800;
-    margin-bottom: 4px;
-}
-
-.ewmt-subtitle {
-    font-size: 17px;
-    color: #dbeafe;
-}
-
-.dashboard-card {
-    background: white;
-    padding: 22px;
-    border-radius: 18px;
-    border: 1px solid #e5e7eb;
-    box-shadow: 0px 4px 14px rgba(15,23,42,0.08);
-    min-height: 145px;
-    margin-bottom: 12px;
-}
-
-.dashboard-card h3 {
-    margin-top: 0;
-    color: #0f172a;
-}
-
-.dashboard-card p {
-    color: #475569;
-}
-
-.stButton > button {
-    background-color: #1e3a8a;
-    color: white;
-    border-radius: 10px;
-    padding: 0.65rem 1.25rem;
-    font-weight: 700;
-    border: none;
-    width: 100%;
-}
-
-.stButton > button:hover {
-    background-color: #0f172a;
-    color: white;
-}
-
-.stDownloadButton > button {
-    background-color: #047857;
-    color: white;
-    border-radius: 10px;
-    padding: 0.65rem 1.25rem;
-    font-weight: 700;
-    border: none;
-}
-
-.stDownloadButton > button:hover {
-    background-color: #065f46;
-    color: white;
-}
-
-div[data-testid="stExpander"] {
-    border-radius: 12px;
-    border: 1px solid #e5e7eb;
-}
-</style>
-""", unsafe_allow_html=True)
-
-# =====================
-# HEADER
-# =====================
-st.markdown("""
-<div class="ewmt-header">
-    <div class="ewmt-title">Eric Wong Machinery Transportation Pte Ltd</div>
-    <div class="ewmt-subtitle">
-        Heavy Machinery Moving • Lifting • Transportation • AI Document Control System
-    </div>
-</div>
-""", unsafe_allow_html=True)
-
-# =====================
 # OPENAI CLIENT
 # =====================
 client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -158,13 +52,314 @@ RA_VECTOR_STORE_ID = "vs_69ecd191648481919d1d1d57f21264af"
 LP_VECTOR_STORE_ID = "vs_69ecdc44d59081919fb10574510b7454"
 
 # =====================
-# PATHS
+# PATHS + ASSETS
 # =====================
 BASE_DIR = os.path.dirname(__file__)
+ASSET_DIR = os.path.join(BASE_DIR, "assets")
 
 MS_TEMPLATE = os.path.join(BASE_DIR, "Templates", "Method of statement Template.docx")
 RA_TEMPLATE = os.path.join(BASE_DIR, "Templates", "RA Template.docx")
 LP_TEMPLATE = os.path.join(BASE_DIR, "Templates", "Lifting Plan Template.docx")
+
+
+def image_to_base64(path):
+    try:
+        with open(path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    except Exception:
+        return ""
+
+
+def asset_image(filename, fallback="banner.jpg"):
+    path = os.path.join(ASSET_DIR, filename)
+
+    if os.path.exists(path):
+        return image_to_base64(path)
+
+    fallback_path = os.path.join(ASSET_DIR, fallback)
+
+    if os.path.exists(fallback_path):
+        return image_to_base64(fallback_path)
+
+    return ""
+
+
+HEADER_IMAGE = asset_image("banner.jpg")
+METHOD_IMAGE = asset_image("method_statement.jpg")
+LIFTING_IMAGE = asset_image("lifting_plan.jpg")
+RISK_IMAGE = asset_image("risk_assessment.jpg", "method_statement.jpg")
+GEAR_IMAGE = asset_image("gear_register.jpg", "lifting_plan.jpg")
+TRAINING_IMAGE = asset_image("training_certificate.jpg", "method_statement.jpg")
+EXPIRY_IMAGE = asset_image("expiry_alert.jpg", "training_certificate.jpg")
+
+# =====================
+# PROFESSIONAL MODERN INDUSTRIAL UI STYLE
+# =====================
+st.markdown(f"""
+<style>
+.stApp {{
+    background: linear-gradient(180deg, #f4f7fb 0%, #eef2f7 100%);
+}}
+
+.block-container {{
+    padding-top: 1.1rem;
+    padding-bottom: 2rem;
+    max-width: 1520px;
+}}
+
+[data-testid="stSidebar"] {{
+    background: linear-gradient(180deg, #071126 0%, #0f172a 52%, #1e293b 100%);
+    border-right: 1px solid rgba(255,255,255,0.08);
+}}
+
+[data-testid="stSidebar"] * {{
+    color: white;
+}}
+
+[data-testid="stSidebar"] .stRadio label {{
+    font-weight: 600;
+}}
+
+.ewmt-header {{
+    position: relative;
+    overflow: hidden;
+    min-height: 155px;
+    background:
+        linear-gradient(90deg, rgba(15,23,42,0.96), rgba(30,58,138,0.90), rgba(15,23,42,0.76)),
+        url("data:image/jpg;base64,{HEADER_IMAGE}");
+    background-size: cover;
+    background-position: center;
+    padding: 30px 36px;
+    border-radius: 24px;
+    color: white;
+    margin-bottom: 24px;
+    box-shadow: 0px 16px 38px rgba(15,23,42,0.26);
+    border: 1px solid rgba(255,255,255,0.14);
+}}
+
+.ewmt-header:after {{
+    content: "";
+    position: absolute;
+    left: 36px;
+    right: 36px;
+    bottom: 0;
+    height: 4px;
+    background: linear-gradient(90deg, #f59e0b, rgba(245,158,11,0.15));
+    border-radius: 99px;
+}}
+
+.ewmt-badge {{
+    display: inline-block;
+    background: rgba(255,255,255,0.14);
+    border: 1px solid rgba(255,255,255,0.22);
+    padding: 7px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    color: #dbeafe;
+    margin-bottom: 10px;
+    backdrop-filter: blur(6px);
+}}
+
+.ewmt-title {{
+    font-size: 36px;
+    line-height: 1.15;
+    font-weight: 900;
+    margin-bottom: 8px;
+    letter-spacing: -0.6px;
+}}
+
+.ewmt-subtitle {{
+    font-size: 17px;
+    color: #dbeafe;
+    max-width: 850px;
+}}
+
+.section-title {{
+    font-size: 25px;
+    font-weight: 850;
+    color: #0f172a;
+    margin-top: 18px;
+    margin-bottom: 8px;
+}}
+
+.section-caption {{
+    color: #64748b;
+    margin-bottom: 18px;
+}}
+
+.metric-card {{
+    background: rgba(255,255,255,0.92);
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: 18px 20px;
+    box-shadow: 0px 8px 24px rgba(15,23,42,0.07);
+    position: relative;
+    overflow: hidden;
+    min-height: 105px;
+}}
+
+.metric-card:before {{
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 5px;
+    background: #f59e0b;
+}}
+
+.metric-label {{
+    color: #64748b;
+    font-size: 14px;
+    font-weight: 700;
+}}
+
+.metric-value {{
+    color: #0f172a;
+    font-size: 32px;
+    font-weight: 900;
+    margin-top: 6px;
+}}
+
+.metric-small {{
+    color: #94a3b8;
+    font-size: 12px;
+    margin-top: 2px;
+}}
+
+.dashboard-card {{
+    background: white;
+    border-radius: 22px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0px 10px 28px rgba(15,23,42,0.08);
+    overflow: hidden;
+    margin-bottom: 12px;
+    min-height: 330px;
+    transition: all 0.18s ease;
+}}
+
+.dashboard-card:hover {{
+    transform: translateY(-4px);
+    box-shadow: 0px 18px 38px rgba(15,23,42,0.14);
+    border-color: rgba(30,58,138,0.28);
+}}
+
+.dashboard-img {{
+    height: 145px;
+    background-size: cover;
+    background-position: center;
+    position: relative;
+}}
+
+.dashboard-img:after {{
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, rgba(15,23,42,0.05), rgba(15,23,42,0.74));
+}}
+
+.dashboard-pill {{
+    position: absolute;
+    left: 18px;
+    bottom: 14px;
+    z-index: 2;
+    color: white;
+    background: rgba(15,23,42,0.70);
+    border: 1px solid rgba(255,255,255,0.20);
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 800;
+}}
+
+.dashboard-content {{
+    padding: 20px 22px 10px 22px;
+}}
+
+.dashboard-content h3 {{
+    margin: 0 0 10px 0;
+    color: #0f172a;
+    font-size: 23px;
+    font-weight: 900;
+}}
+
+.dashboard-content p {{
+    color: #475569;
+    font-size: 15px;
+    line-height: 1.55;
+    min-height: 52px;
+    margin-bottom: 0;
+}}
+
+.card-accent {{
+    height: 4px;
+    width: 58px;
+    background: #f59e0b;
+    border-radius: 999px;
+    margin-bottom: 14px;
+}}
+
+.stButton > button {{
+    background: linear-gradient(90deg, #1e3a8a, #2563eb);
+    color: white;
+    border-radius: 12px;
+    padding: 0.70rem 1.25rem;
+    font-weight: 800;
+    border: none;
+    width: 100%;
+    box-shadow: 0px 8px 18px rgba(30,58,138,0.20);
+}}
+
+.stButton > button:hover {{
+    background: linear-gradient(90deg, #0f172a, #1e3a8a);
+    color: white;
+    transform: translateY(-1px);
+}}
+
+.stDownloadButton > button {{
+    background: linear-gradient(90deg, #047857, #059669);
+    color: white;
+    border-radius: 12px;
+    padding: 0.70rem 1.25rem;
+    font-weight: 800;
+    border: none;
+}}
+
+.stDownloadButton > button:hover {{
+    background: #065f46;
+    color: white;
+}}
+
+div[data-testid="stExpander"] {{
+    border-radius: 15px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0px 4px 14px rgba(15,23,42,0.04);
+    background: white;
+}}
+
+.footer-note {{
+    margin-top: 20px;
+    padding: 18px 22px;
+    background: #0f172a;
+    color: #cbd5e1;
+    border-radius: 18px;
+    border-left: 5px solid #f59e0b;
+}}
+</style>
+""", unsafe_allow_html=True)
+
+# =====================
+# HEADER
+# =====================
+st.markdown("""
+<div class="ewmt-header">
+    <div class="ewmt-badge">EWMT INTERNAL AI SYSTEM</div>
+    <div class="ewmt-title">Eric Wong Machinery Transportation Pte Ltd</div>
+    <div class="ewmt-subtitle">
+        Heavy Machinery Moving • Lifting • Transportation • AI Document Control System
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # =====================
 # COMMON FUNCTIONS
@@ -594,93 +789,160 @@ with st.sidebar:
 # DASHBOARD
 # ======================================================
 if page == "🏠 Dashboard":
-    st.markdown("## EWMT AI Document Control Dashboard")
-    st.caption("Click a module below or use the sidebar to generate professional project documents.")
+    st.markdown("""
+    <div class="section-title">EWMT AI Document Control Dashboard</div>
+    <div class="section-caption">
+        Professional document generation, lifting operation records and certificate control system.
+    </div>
+    """, unsafe_allow_html=True)
+
+    m1, m2, m3, m4 = st.columns(4)
+
+    with m1:
+        st.markdown("""
+        <div class="metric-card">
+            <div class="metric-label">Documents Generated</div>
+            <div class="metric-value">128</div>
+            <div class="metric-small">Method Statement / RA / Lifting Plan</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with m2:
+        st.markdown("""
+        <div class="metric-card">
+            <div class="metric-label">Gear Records</div>
+            <div class="metric-value">64</div>
+            <div class="metric-small">Slings, shackles, wire ropes</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with m3:
+        st.markdown("""
+        <div class="metric-card">
+            <div class="metric-label">Expiring Soon</div>
+            <div class="metric-value">8</div>
+            <div class="metric-small">Certificate expiry monitoring</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with m4:
+        st.markdown("""
+        <div class="metric-card">
+            <div class="metric-label">Worker Certificates</div>
+            <div class="metric-value">42</div>
+            <div class="metric-small">Training and competency records</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown('<div class="section-title">Document Modules</div>', unsafe_allow_html=True)
+
+    def dashboard_card(title, desc, image_b64, tag):
+        st.markdown(f"""
+        <div class="dashboard-card">
+            <div class="dashboard-img" style='background-image:url("data:image/jpg;base64,{image_b64}")'>
+                <div class="dashboard-pill">{tag}</div>
+            </div>
+            <div class="dashboard-content">
+                <div class="card-accent"></div>
+                <h3>{title}</h3>
+                <p>{desc}</p>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
     col1, col2, col3 = st.columns(3)
 
     with col1:
-        st.markdown("""
-        <div class="dashboard-card">
-            <h3>📄 Method Statement</h3>
-            <p>Create professional method statements for machinery moving and lifting work.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        dashboard_card(
+            "📄 Method Statement",
+            "Create professional method statements for machinery moving, factory shifting, transport and lifting works.",
+            METHOD_IMAGE,
+            "WORK METHOD"
+        )
 
         if st.button("Open Method Statement", key="open_ms"):
             go_to_page("📄 Method Statement")
 
     with col2:
-        st.markdown("""
-        <div class="dashboard-card">
-            <h3>🏗️ Lifting Plan</h3>
-            <p>Generate lifting plan / permit-to-work documents based on site and crane details.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        dashboard_card(
+            "🏗️ Lifting Plan",
+            "Generate lifting plan and permit-to-work documents based on load, crane, radius and site conditions.",
+            LIFTING_IMAGE,
+            "LIFTING OPERATION"
+        )
 
         if st.button("Open Lifting Plan", key="open_lp"):
             go_to_page("🏗️ Lifting Plan")
 
     with col3:
-        st.markdown("""
-        <div class="dashboard-card">
-            <h3>⚠️ Risk Assessment Pro</h3>
-            <p>Create structured 5x5 risk assessments based on actual work activities.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        dashboard_card(
+            "⚠️ Risk Assessment Pro",
+            "Create structured 5x5 risk assessments using actual activity, hazard, controls and residual risk.",
+            RISK_IMAGE,
+            "SAFETY CONTROL"
+        )
 
         if st.button("Open Risk Assessment", key="open_ra"):
             go_to_page("⚠️ Risk Assessment Pro")
 
-    st.markdown("### Certificate / Records Modules")
+    st.markdown('<div class="section-title">Certificate / Records Modules</div>', unsafe_allow_html=True)
+
     col4, col5, col6 = st.columns(3)
 
     with col4:
-        st.markdown("""
-        <div class="dashboard-card">
-            <h3>🧰 Lifting Gear Register</h3>
-            <p>Manage shackles, slings, wire ropes, certificates and expiry dates.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        dashboard_card(
+            "🧰 Lifting Gear Register",
+            "Manage shackles, slings, wire ropes, lifting certificates, SWL records and expiry dates.",
+            GEAR_IMAGE,
+            "GEAR RECORDS"
+        )
 
         if st.button("Open Lifting Gear Register", key="open_lg"):
             go_to_page("🧰 Lifting Gear Register")
 
     with col5:
-        st.markdown("""
-        <div class="dashboard-card">
-            <h3>👷 Worker Training Certificate</h3>
-            <p>Search, preview and download worker training certificates uploaded in GitHub.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        dashboard_card(
+            "👷 Worker Training Certificate",
+            "Search, preview and download worker training certificates uploaded into your GitHub folders.",
+            TRAINING_IMAGE,
+            "WORKER RECORDS"
+        )
 
         if st.button("Open Worker Training Certificate", key="open_worker_cert"):
             go_to_page("👷 Worker Training Certificate")
 
     with col6:
-        st.markdown("""
-        <div class="dashboard-card">
-            <h3>⏰ Expiry Alerts</h3>
-            <p>Check expired and expiring lifting gear certificates.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        dashboard_card(
+            "⏰ Expiry Alerts",
+            "Check expired and expiring lifting gear certificates using expiry dates in your file names.",
+            EXPIRY_IMAGE,
+            "EXPIRY MONITORING"
+        )
 
         if st.button("Open Expiry Alerts", key="open_expiry"):
             go_to_page("⏰ Expiry Alerts")
 
-    st.markdown("### System")
+    st.markdown('<div class="section-title">System</div>', unsafe_allow_html=True)
+
     col7, col8, col9 = st.columns(3)
 
     with col7:
-        st.markdown("""
-        <div class="dashboard-card">
-            <h3>⚙️ Settings</h3>
-            <p>Manage templates, prepared by names and default company details.</p>
-        </div>
-        """, unsafe_allow_html=True)
+        dashboard_card(
+            "⚙️ Settings",
+            "Manage template placeholders, prepared-by names and future default company details.",
+            HEADER_IMAGE,
+            "SYSTEM CONFIG"
+        )
 
         if st.button("Open Settings", key="open_settings"):
             go_to_page("⚙️ Settings")
+
+    st.markdown("""
+    <div class="footer-note">
+        <b>EWMT Internal System</b><br>
+        For preparation of method statements, lifting plans, risk assessments, lifting gear records and worker certificate control.
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # ======================================================
@@ -840,9 +1102,6 @@ job_scope
                     "{{lifting_crew}}": safe_text(ms_lifting_crew),
                     "{{prepared_by}}": safe_text(ms_prepared_by),
                 })
-
-                # Do not call format_method_statement(doc)
-                # This keeps the original Word template font.
 
                 buffer = BytesIO()
                 doc.save(buffer)
@@ -1032,7 +1291,6 @@ Return JSON only:
                 doc = Document(LP_TEMPLATE)
 
                 replacements = {
-                    # General
                     "{{company}}": safe_text(lp_company),
                     "{{project_name}}": safe_text(lp_project_name),
                     "{{location}}": safe_text(lp_location),
@@ -1041,7 +1299,6 @@ Return JSON only:
                     "{{operation_time}}": safe_text(lp_operation_time),
                     "{{validity_period}}": safe_text(lp_validity),
 
-                    # Load
                     "{{description_of_work}}": safe_text(lp_description),
                     "{{machine_spec}}": safe_text(lp_machine),
                     "{{machine_name}}": safe_text(lp_machine),
@@ -1050,13 +1307,11 @@ Return JSON only:
 
                     "{{kw}}": tick(weight_known),
                     "{{ew}}": tick(weight_estimated),
-
                     "{{obv}}": tick(cg_obvious),
                     "{{Est}}": tick(cg_estimated),
                     "{{est}}": tick(cg_estimated),
                     "{{ddw}}": tick(cg_drawing),
 
-                    # Lifting equipment
                     "{{mob_cr}}": tick(mobile_crane),
                     "{{lor_cr}}": tick(lorry_loader),
 
@@ -1072,7 +1327,6 @@ Return JSON only:
                     "{{ crane_radius }}": safe_text(crane_radius),
                     "{{crane_radius }}": safe_text(crane_radius),
                     "{{ crane_radius}}": safe_text(crane_radius),
-
                     "{{crane_swl_radius}}": safe_text(crane_swl_radius),
 
                     "{{lifting_gear}}": safe_text(lifting_gear_manual),
@@ -1084,32 +1338,23 @@ Return JSON only:
                     "{{c_lg_n}}": tick(lg_cert_no),
                     "{{lg_expiry}}": safe_text(lg_expiry),
 
-                    # Communication
                     "{{coms_y}}": tick(operator_can_see_yes),
                     "{{coms_n}}": tick(operator_can_see_no),
-
-                    # If Word template still has {{coms}}, this prevents coding from showing.
-                    # Best template is {{coms_y}} Yes and {{coms_n}} No.
                     "{{coms}}": tick(operator_can_see_yes),
 
-                    # Your new placeholders
                     "{{shs}}": tick(comm_standard),
                     "{{rad}}": tick(comm_radio),
-
-                    # Old communication placeholder support
                     "{{comm_standard}}": tick(comm_standard),
                     "{{comm_radio}}": tick(comm_radio),
                     "{{comm_others}}": tick(comm_others),
                     "{{comm_others_text}}": safe_text(comm_others_text),
 
-                    # Personnel
                     "{{site_supervisor}}": safe_text(site_supervisor),
                     "{{lifting_supervisor}}": safe_text(lifting_supervisor),
                     "{{equipment_operator}}": safe_text(equipment_operator),
                     "{{rigger_1}}": safe_text(rigger_1),
                     "{{rigger_2}}": safe_text(rigger_2),
 
-                    # Physical and Environmental
                     "{{gc_y}}": tick(ground_safe_yes),
                     "{{gc_n}}": tick(ground_safe_no),
                     "{{go_y}}": tick(outriggers_yes),
@@ -1124,7 +1369,6 @@ Return JSON only:
                     "{{de_n}}": tick(barricade_no),
                     "{{other_precautions}}": safe_text(other_precautions),
 
-                    # Tasks
                     "{{task_sequence}}": safe_text(task_sequence),
                     "{{tasks}}": safe_text(task_sequence),
                     "{{lifting_method}}": safe_text(data.get("lifting_method", "")),
@@ -1132,7 +1376,6 @@ Return JSON only:
                     "{{person_in_charge}}": safe_text(person_in_charge),
                     "{{task_pic}}": safe_text(person_in_charge),
 
-                    # Approval
                     "{{applied_by}}": safe_text(applied_by),
                     "{{applied_designation}}": safe_text(applied_designation),
                     "{{prepared_by}}": safe_text(prepared_by),
@@ -1142,7 +1385,6 @@ Return JSON only:
                     "{{approved_by}}": safe_text(approved_by),
                     "{{approved_designation}}": safe_text(approved_designation),
 
-                    # Old placeholder support
                     "{{known_weight_checked}}": tick(weight_known),
                     "{{estimated_weight_checked}}": tick(weight_estimated),
                     "{{center_gravity_obvious}}": tick(cg_obvious),
@@ -1169,9 +1411,6 @@ Return JSON only:
                 }
 
                 replace_all(doc, replacements)
-
-                # Do not call format_risk_assessment(doc)
-                # This keeps the original Word template font for Lifting Plan.
 
                 buffer = BytesIO()
                 doc.save(buffer)
@@ -1379,7 +1618,7 @@ if page == "⏰ Expiry Alerts":
     st.markdown("## ⏰ Expiry Alerts")
     st.caption("Show expired and expiring lifting gear certificates from your GitHub folder.")
 
-    from datetime import datetime, timedelta
+    from datetime import timedelta
     import re
 
     CERT_FOLDER = os.path.join(BASE_DIR, "Lifting Gears Certificate")
@@ -1434,7 +1673,7 @@ if page == "⏰ Expiry Alerts":
                                 )
 
                             break
-                        except:
+                        except Exception:
                             found_date = None
 
                 if found_date:
@@ -1465,9 +1704,10 @@ if page == "⏰ Expiry Alerts":
             expiring = [r for r in records if r["Status"] == "Expiring Soon"]
             valid = [r for r in records if r["Status"] == "Valid"]
 
-            st.metric("Expired", len(expired))
-            st.metric("Expiring Soon", len(expiring))
-            st.metric("Valid", len(valid))
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Expired", len(expired))
+            c2.metric("Expiring Soon", len(expiring))
+            c3.metric("Valid", len(valid))
 
             st.markdown("### Certificate Expiry List")
             st.dataframe(records, use_container_width=True)
