@@ -1146,7 +1146,103 @@ if page == "🧰 Lifting Gear Register":
 # ======================================================
 if page == "⏰ Expiry Alerts":
     st.markdown("## ⏰ Expiry Alerts")
-    st.info("This module can be added next: show expired and expiring lifting gear certificates.")
+    st.caption("Show expired and expiring lifting gear certificates from your GitHub folder.")
+
+    from datetime import datetime, timedelta
+    import re
+
+    CERT_FOLDER = os.path.join(BASE_DIR, "Lifting Gears Certificate")
+
+    if not os.path.exists(CERT_FOLDER):
+        st.error("Folder not found: Lifting Gears Certificate")
+        st.code("Lifting Gears Certificate")
+    else:
+        files = [
+            f for f in os.listdir(CERT_FOLDER)
+            if f.lower().endswith((".pdf", ".png", ".jpg", ".jpeg"))
+        ]
+
+        if not files:
+            st.warning("No certificate files found.")
+        else:
+            today = date.today()
+            alert_days = st.number_input(
+                "Show certificates expiring within how many days?",
+                min_value=1,
+                max_value=365,
+                value=30
+            )
+
+            records = []
+
+            for f in files:
+                found_date = None
+
+                patterns = [
+                    r"(\d{4})[-_\.](\d{1,2})[-_\.](\d{1,2})",
+                    r"(\d{1,2})[-_\.](\d{1,2})[-_\.](\d{4})",
+                ]
+
+                for pattern in patterns:
+                    match = re.search(pattern, f)
+                    if match:
+                        try:
+                            parts = match.groups()
+
+                            if len(parts[0]) == 4:
+                                found_date = date(
+                                    int(parts[0]),
+                                    int(parts[1]),
+                                    int(parts[2])
+                                )
+                            else:
+                                found_date = date(
+                                    int(parts[2]),
+                                    int(parts[1]),
+                                    int(parts[0])
+                                )
+
+                            break
+                        except:
+                            found_date = None
+
+                if found_date:
+                    days_left = (found_date - today).days
+
+                    if days_left < 0:
+                        status = "Expired"
+                    elif days_left <= alert_days:
+                        status = "Expiring Soon"
+                    else:
+                        status = "Valid"
+
+                    records.append({
+                        "Certificate File": f,
+                        "Expiry Date": str(found_date),
+                        "Days Left": days_left,
+                        "Status": status
+                    })
+                else:
+                    records.append({
+                        "Certificate File": f,
+                        "Expiry Date": "No date found in filename",
+                        "Days Left": "",
+                        "Status": "Unknown"
+                    })
+
+            expired = [r for r in records if r["Status"] == "Expired"]
+            expiring = [r for r in records if r["Status"] == "Expiring Soon"]
+            valid = [r for r in records if r["Status"] == "Valid"]
+            unknown = [r for r in records if r["Status"] == "Unknown"]
+
+            st.metric("Expired", len(expired))
+            st.metric("Expiring Soon", len(expiring))
+            st.metric("Valid", len(valid))
+
+            st.markdown("### Certificate Expiry List")
+            st.dataframe(records, use_container_width=True)
+
+            st.info("For this to work, put expiry date inside the certificate filename, example: 3 Ton Shackle Expiry 2026-06-30.pdf")
 
 
 # ======================================================
