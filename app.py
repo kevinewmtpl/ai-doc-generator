@@ -621,7 +621,7 @@ job_scope
 # ======================================================
 if page == "🏗️ Lifting Plan":
     st.markdown("## 🏗️ Lifting Plan / Permit to Work")
-    st.caption("Fill in all lifting details according to your template placeholders.")
+    st.caption("Fill in all lifting details. Checkboxes selected here will be inserted into your Word template.")
 
     with st.expander("1. General", expanded=True):
         lp_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="lp_company")
@@ -629,25 +629,32 @@ if page == "🏗️ Lifting Plan":
         lp_location = st.text_input("Location of Lifting Operation", key="lp_location")
         lp_date_input = st.date_input("Date", value=date.today(), key="lp_date_input")
         lp_operation_time = st.text_input("Operation Time", key="lp_operation_time")
-        lp_validity = st.text_input("Validity Period", "1 Day", key="lp_validity")
+        lp_validity = st.text_input("Validity Period of Lifting Operation", "1 Day", key="lp_validity")
 
     with st.expander("2. Details of Loads to be Hoist", expanded=True):
         lp_description = st.text_area("Description of Load", key="lp_description")
         lp_machine = st.text_input("Machine Name / Spec", key="lp_machine")
         lp_machine_dimension = st.text_input("Overall Dimension of Load", key="lp_machine_dimension")
         lp_machine_weight = st.text_input("Weight of Load", key="lp_machine_weight")
-        lp_center_gravity = st.selectbox(
-            "Centre of Gravity",
-            ["Obvious", "Estimated", "Determined by drawing"],
-            key="lp_center_gravity"
-        )
+
+        weight_known = st.checkbox("Known Weight", value=True, key="weight_known")
+        weight_estimated = st.checkbox("Estimated Weight", value=False, key="weight_estimated")
+
+        cg_obvious = st.checkbox("Centre of Gravity - Obvious", value=True, key="cg_obvious")
+        cg_estimated = st.checkbox("Centre of Gravity - Estimated", value=False, key="cg_estimated")
+        cg_drawing = st.checkbox("Centre of Gravity - Determined by Drawing", value=False, key="cg_drawing")
 
     with st.expander("3. Details of Lifting Equipment", expanded=True):
-        lifting_equipment_type = st.selectbox(
-            "Type of Lifting Equipment",
-            ["Mobile crane", "Lorry loader"],
-            key="lifting_equipment_type"
-        )
+        mobile_crane = st.checkbox("Mobile Crane", value=False, key="mobile_crane")
+        lorry_loader = st.checkbox("Lorry Loader", value=True, key="lorry_loader")
+
+        crane_name = st.text_input("LM / LE Registration No.", key="crane_name")
+        crane_renew = st.text_input("Date of Last Certification", key="crane_renew")
+        crane_expiry = st.text_input("Expiry Date of Certificate", key="crane_expiry")
+        crane_swl = st.text_input("Max Safe Working Load", key="crane_swl")
+        boom_length = st.text_input("Max Boom / Jib Length", key="boom_length")
+        crane_radius = st.text_input("Intended Load Radius", key="crane_radius")
+        crane_swl_radius = st.text_input("SWL at This Radius", key="crane_swl_radius")
 
         lifting_gear_manual = st.text_area(
             "Type of Lifting Gears",
@@ -659,22 +666,24 @@ Tag lines""",
             key="lifting_gear_manual"
         )
 
-        crane_name = st.text_input("LM / LE Registration No.", key="crane_name")
-        crane_renew = st.text_input("Date of Last Certification", key="crane_renew")
-        crane_expiry = st.text_input("Expiry Date of Certificate", key="crane_expiry")
-        crane_swl = st.text_input("Max Safe Working Load", key="crane_swl")
-        boom_length = st.text_input("Max Boom / Jig Length", key="boom_length")
-        crane_radius = st.text_input("Intended Load Radius", key="crane_radius")
-        crane_swl_radius = st.text_input("SWL at This Radius", key="crane_swl_radius")
-        total_swl_lg = st.text_input("SWL of Lifting Gear", key="total_swl_lg")
         lg_weight = st.text_input("Combined Weight of Lifting Gears", key="lg_weight")
+        total_swl_lg = st.text_input("SWL of Lifting Gear", key="total_swl_lg")
+
+        lg_cert_yes = st.checkbox("Certification of Lifting Gears - Yes", value=True, key="lg_cert_yes")
+        lg_cert_no = st.checkbox("Certification of Lifting Gears - No", value=False, key="lg_cert_no")
+
         lg_expiry = st.text_input("Expiry Date of Lifting Gear Certificate", key="lg_expiry")
 
     with st.expander("4. Means of Communication", expanded=True):
-        operator_can_see = st.checkbox("Operator can see loading / unloading position", value=True, key="operator_can_see")
-        communication_method = st.text_input("Communication Method", "Standard hand signals", key="communication_method")
+        operator_can_see_yes = st.checkbox("Operator Can See Loading / Unloading Position - Yes", value=False, key="operator_can_see_yes")
+        operator_can_see_no = st.checkbox("Operator Can See Loading / Unloading Position - No", value=False, key="operator_can_see_no")
 
-    with st.expander("5. Personnel Involved", expanded=True):
+        comm_standard = st.checkbox("Standard Hand Signals", value=True, key="comm_standard")
+        comm_radio = st.checkbox("Radio", value=False, key="comm_radio")
+        comm_others = st.checkbox("Others", value=False, key="comm_others")
+        comm_others_text = st.text_input("Others Communication Details", key="comm_others_text")
+
+    with st.expander("5. Personnel Involved in Lifting Operation", expanded=True):
         site_supervisor = st.text_input("Site Supervisor", "Ibrahim / Zahari / Zaharin / Wong Yen Siong", key="site_supervisor")
         lifting_supervisor = st.text_input("Lifting Supervisor", "Ibrahim / Zahari / Zaharin / Wong Yen Siong", key="lifting_supervisor")
         equipment_operator = st.text_input("Lifting Equipment Operator", "Lim Poh Soon / Norhalim / Lim Poh Thian / Ngaimin / Azmi", key="equipment_operator")
@@ -682,38 +691,60 @@ Tag lines""",
         rigger_2 = st.text_input("Rigger / Signalman 2", "Rahman / Malik / Sarawanan / Sing Kwok Liang", key="rigger_2")
 
     with st.expander("6. Physical and Environmental Considerations", expanded=True):
-        ground_safe = st.checkbox("Ground Safe", value=True, key="ground_safe")
-        outriggers = st.checkbox("Outriggers Extended", value=True, key="outriggers")
-        no_overhead_obstacles = st.checkbox("No Overhead Obstacles", value=True, key="no_overhead_obstacles")
-        no_obstruction = st.checkbox("No obstruction from structure / equipment / stacked materials", value=True, key="no_obstruction")
-        lighting = st.checkbox("Lighting Adequate", value=True, key="lighting")
-        barricade = st.checkbox("Area Barricaded / Demarcated", value=True, key="barricade")
-        other_precautions = st.text_area("Other Precautions", "To ensure lifting zone is clear and unauthorised access is prevented.", key="other_precautions")
+        ground_safe_yes = st.checkbox("Ground Made Safe - Yes", value=False, key="ground_safe_yes")
+        ground_safe_no = st.checkbox("Ground Made Safe - No", value=False, key="ground_safe_no")
+
+        outriggers_yes = st.checkbox("Outriggers Evenly Extended - Yes", value=False, key="outriggers_yes")
+        outriggers_no = st.checkbox("Outriggers Evenly Extended - No", value=False, key="outriggers_no")
+
+        overhead_obstacle_yes = st.checkbox("Overhead Obstacles - Yes", value=False, key="overhead_obstacle_yes")
+        overhead_obstacle_no = st.checkbox("Overhead Obstacles - No", value=False, key="overhead_obstacle_no")
+
+        obstruction_yes = st.checkbox("Structure / Equipment / Materials Obstruction - Yes", value=False, key="obstruction_yes")
+        obstruction_no = st.checkbox("Structure / Equipment / Materials Obstruction - No", value=False, key="obstruction_no")
+
+        lighting_yes = st.checkbox("Lighting Adequate - Yes", value=False, key="lighting_yes")
+        lighting_no = st.checkbox("Lighting Adequate - No", value=False, key="lighting_no")
+
+        barricade_yes = st.checkbox("Zone Barricaded / Demarcated - Yes", value=True, key="barricade_yes")
+        barricade_no = st.checkbox("Zone Barricaded / Demarcated - No", value=False, key="barricade_no")
+
+        other_precautions = st.text_area("Other Precautions", key="other_precautions")
 
     with st.expander("7. Tasks", expanded=True):
         task_sequence = st.text_area(
             "Sequence of Lifting Operations",
-            height=260,
-            value="""1. Deploy lorry loader / crane at designated unloading area
-2. Set up crane with outriggers fully extended and resting on timber mats / base plate
+            height=280,
+            value="""1. Deploy lorry loader at designated unloading area
+2. Set up crane with outriggers fully extended and resting on timber mats as base plate
 3. Rigger to insert sling to crane hook
 4. Secure sling to rigging point of load
-5. Conduct trial lift to confirm load stability
-6. Hoist load slowly and steadily
-7. Transport machine to door entrance / designated area
-8. Using pallet truck / roller to shift and position machine
+5. Lorry loader to hoist down load from lorry chassis to the ground
+6. Using forklift to unload and fork down machine from lorry chassis to the ground
+7. Transport machine to door entrance
+8. Using pallet truck to shift and position machine into factory premise
 9. Position at the designated location
 10. Once job complete, carry out proper housekeeping
-11. All debris to be cleared and disposed
+11. All debris will be cleared and disposed
 12. Job complete""",
             key="task_sequence"
         )
 
         person_in_charge = st.text_input(
-            "Person In Charge for Each Step",
+            "Person in Charge for Each Step",
             "Zahari / Ibrahim / Wong Yen Siong",
             key="person_in_charge"
         )
+
+    with st.expander("8. Approval of Lifting Plan", expanded=True):
+        applied_by = st.text_input("Applied By", "Zailani", key="applied_by")
+        applied_designation = st.text_input("Applied By Designation", "Supervisor", key="applied_designation")
+        prepared_by = st.text_input("Prepared By", "Zahari", key="prepared_by_lp")
+        prepared_designation = st.text_input("Prepared By Designation", "Lifting Supervisor", key="prepared_designation")
+        assessed_by = st.text_input("Assessed By", "Kevin Wong", key="assessed_by")
+        assessed_designation = st.text_input("Assessed By Designation", "Project Manager", key="assessed_designation")
+        approved_by = st.text_input("Approved By", "Eric Wong", key="approved_by")
+        approved_designation = st.text_input("Approved By Designation", "Managing Director", key="approved_designation")
 
     generate_lp = st.button("🏗️ Generate Lifting Plan", key="generate_lp")
 
@@ -774,28 +805,40 @@ Return JSON only:
                     "{{machine_dimension}}": lp_machine_dimension,
                     "{{machine_weight}}": lp_machine_weight,
 
-                    "{{center_gravity_obvious}}": "☒" if lp_center_gravity == "Obvious" else "☐",
-                    "{{center_gravity_estimated}}": "☒" if lp_center_gravity == "Estimated" else "☐",
-                    "{{center_gravity_drawing}}": "☒" if lp_center_gravity == "Determined by drawing" else "☐",
+                    "{{known_weight_checked}}": "☒" if weight_known else "☐",
+                    "{{estimated_weight_checked}}": "☒" if weight_estimated else "☐",
 
-                    "{{mobile_crane_checked}}": "☒" if lifting_equipment_type == "Mobile crane" else "☐",
-                    "{{lorry_loader_checked}}": "☒" if lifting_equipment_type == "Lorry loader" else "☐",
+                    "{{center_gravity_obvious}}": "☒" if cg_obvious else "☐",
+                    "{{center_gravity_estimated}}": "☒" if cg_estimated else "☐",
+                    "{{center_gravity_drawing}}": "☒" if cg_drawing else "☐",
+
+                    "{{mobile_crane_checked}}": "☒" if mobile_crane else "☐",
+                    "{{lorry_loader_checked}}": "☒" if lorry_loader else "☐",
 
                     "{{crane_name}}": crane_name,
+                    "{{Crane_lm}}": crane_name,
                     "{{crane_renew}}": crane_renew,
                     "{{crane_expiry}}": crane_expiry,
                     "{{crane_swl}}": crane_swl,
                     "{{boom_length}}": boom_length,
                     "{{crane_radius}}": crane_radius,
                     "{{crane_swl_radius}}": crane_swl_radius,
+
                     "{{lifting_gear}}": lifting_gear_manual,
                     "{{lg_weight}}": lg_weight,
+                    "{{lifting_gear_wt}}": lg_weight,
                     "{{total_swl_lg}}": total_swl_lg,
+                    "{{lg_cert_yes}}": "☒" if lg_cert_yes else "☐",
+                    "{{lg_cert_no}}": "☒" if lg_cert_no else "☐",
                     "{{lg_expiry}}": lg_expiry,
 
-                    "{{operator_can_see_yes}}": "☒" if operator_can_see else "☐",
-                    "{{operator_can_see_no}}": "☐" if operator_can_see else "☒",
-                    "{{communication_method}}": communication_method,
+                    "{{operator_can_see_yes}}": "☒" if operator_can_see_yes else "☐",
+                    "{{operator_can_see_no}}": "☒" if operator_can_see_no else "☐",
+
+                    "{{comm_standard}}": "☒" if comm_standard else "☐",
+                    "{{comm_radio}}": "☒" if comm_radio else "☐",
+                    "{{comm_others}}": "☒" if comm_others else "☐",
+                    "{{comm_others_text}}": comm_others_text,
 
                     "{{site_supervisor}}": site_supervisor,
                     "{{lifting_supervisor}}": lifting_supervisor,
@@ -803,26 +846,36 @@ Return JSON only:
                     "{{rigger_1}}": rigger_1,
                     "{{rigger_2}}": rigger_2,
 
-                    "{{ground_safe_yes}}": "☒" if ground_safe else "☐",
-                    "{{ground_safe_no}}": "☐" if ground_safe else "☒",
-                    "{{outriggers_yes}}": "☒" if outriggers else "☐",
-                    "{{outriggers_no}}": "☐" if outriggers else "☒",
-                    "{{obstacles_yes}}": "☐" if no_overhead_obstacles else "☒",
-                    "{{obstacles_no}}": "☒" if no_overhead_obstacles else "☐",
-                    "{{obstruction_yes}}": "☐" if no_obstruction else "☒",
-                    "{{obstruction_no}}": "☒" if no_obstruction else "☐",
-                    "{{lighting_yes}}": "☒" if lighting else "☐",
-                    "{{lighting_no}}": "☐" if lighting else "☒",
-                    "{{barricade_yes}}": "☒" if barricade else "☐",
-                    "{{barricade_no}}": "☐" if barricade else "☒",
+                    "{{ground_safe_yes}}": "☒" if ground_safe_yes else "☐",
+                    "{{ground_safe_no}}": "☒" if ground_safe_no else "☐",
+                    "{{outriggers_yes}}": "☒" if outriggers_yes else "☐",
+                    "{{outriggers_no}}": "☒" if outriggers_no else "☐",
+                    "{{obstacles_yes}}": "☒" if overhead_obstacle_yes else "☐",
+                    "{{obstacles_no}}": "☒" if overhead_obstacle_no else "☐",
+                    "{{obstruction_yes}}": "☒" if obstruction_yes else "☐",
+                    "{{obstruction_no}}": "☒" if obstruction_no else "☐",
+                    "{{lighting_yes}}": "☒" if lighting_yes else "☐",
+                    "{{lighting_no}}": "☒" if lighting_no else "☐",
+                    "{{barricade_yes}}": "☒" if barricade_yes else "☐",
+                    "{{barricade_no}}": "☒" if barricade_no else "☐",
                     "{{other_precautions}}": other_precautions,
 
                     "{{task_sequence}}": task_sequence,
                     "{{lifting_method}}": data["lifting_method"],
                     "{{safety_controls}}": data["safety_controls"],
                     "{{person_in_charge}}": person_in_charge,
-                    "{{prepared_by}}": "Kevin Wong / Zailani"
+
+                    "{{applied_by}}": applied_by,
+                    "{{applied_designation}}": applied_designation,
+                    "{{prepared_by}}": prepared_by,
+                    "{{prepared_designation}}": prepared_designation,
+                    "{{assessed_by}}": assessed_by,
+                    "{{assessed_designation}}": assessed_designation,
+                    "{{approved_by}}": approved_by,
+                    "{{approved_designation}}": approved_designation
                 })
+
+                format_risk_assessment(doc)
 
                 buffer = BytesIO()
                 doc.save(buffer)
