@@ -179,6 +179,7 @@ def replace_all(doc, data):
     """
     Improved Word placeholder replacement.
     Replaces text inside paragraphs, tables, nested tables, headers and footers.
+    Keeps the template formatting as much as python-docx allows.
     """
     def replace_in_paragraph(paragraph, replacements):
         if not paragraph.runs:
@@ -260,6 +261,10 @@ def clean_ms_text(text):
 
 
 def format_method_statement(doc):
+    """
+    Kept for future use, but NOT called now.
+    This function changes fonts, so it is disabled in generation.
+    """
     headings = [
         "METHOD OF STATEMENT",
         "Description of work",
@@ -322,6 +327,10 @@ def set_ra_cell_text(cell, text):
 
 
 def format_risk_assessment(doc):
+    """
+    Used only for Risk Assessment document.
+    Do not use this for Lifting Plan if you want to keep template font.
+    """
     for para in doc.paragraphs:
         for run in para.runs:
             run.font.name = "Times New Roman"
@@ -814,25 +823,26 @@ job_scope
                 doc = Document(MS_TEMPLATE)
 
                 replace_all(doc, {
-                    "{{company}}": ms_company,
-                    "{{project_name}}": ms_project_name,
+                    "{{company}}": safe_text(ms_company),
+                    "{{project_name}}": safe_text(ms_project_name),
                     "{{date}}": str(ms_date_input),
-                    "{{location}}": ms_location,
-                    "{{description_of_work}}": ms_description,
-                    "{{machine_spec}}": ms_machine,
-                    "{{equipment}}": data["equipment"],
-                    "{{safety_aspect}}": data["safety_aspect"],
-                    "{{job_scope}}": data["job_scope"],
+                    "{{location}}": safe_text(ms_location),
+                    "{{description_of_work}}": safe_text(ms_description),
+                    "{{machine_spec}}": safe_text(ms_machine),
+                    "{{equipment}}": safe_text(data["equipment"]),
+                    "{{safety_aspect}}": safe_text(data["safety_aspect"]),
+                    "{{job_scope}}": safe_text(data["job_scope"]),
                     "{{risk_assessment_note}}": "Refer as attached",
                     "{{operation_date}}": str(ms_date_input),
-                    "{{operation_time}}": ms_operation_time,
-                    "{{obstacles}}": ms_obstacles,
-                    "{{environment}}": ms_environment,
-                    "{{lifting_crew}}": ms_lifting_crew,
-                    "{{prepared_by}}": ms_prepared_by,
+                    "{{operation_time}}": safe_text(ms_operation_time),
+                    "{{obstacles}}": safe_text(ms_obstacles),
+                    "{{environment}}": safe_text(ms_environment),
+                    "{{lifting_crew}}": safe_text(ms_lifting_crew),
+                    "{{prepared_by}}": safe_text(ms_prepared_by),
                 })
 
-                format_method_statement(doc)
+                # Do not call format_method_statement(doc)
+                # This keeps the original Word template font.
 
                 buffer = BytesIO()
                 doc.save(buffer)
@@ -1078,10 +1088,15 @@ Return JSON only:
                     "{{coms_y}}": tick(operator_can_see_yes),
                     "{{coms_n}}": tick(operator_can_see_no),
 
-                    # If your Word template accidentally still has {{coms}}, this will prevent coding from showing.
-                    # Better to use {{coms_y}} and {{coms_n}} in Word.
+                    # If Word template still has {{coms}}, this prevents coding from showing.
+                    # Best template is {{coms_y}} Yes and {{coms_n}} No.
                     "{{coms}}": tick(operator_can_see_yes),
 
+                    # Your new placeholders
+                    "{{shs}}": tick(comm_standard),
+                    "{{rad}}": tick(comm_radio),
+
+                    # Old communication placeholder support
                     "{{comm_standard}}": tick(comm_standard),
                     "{{comm_radio}}": tick(comm_radio),
                     "{{comm_others}}": tick(comm_others),
@@ -1154,7 +1169,9 @@ Return JSON only:
                 }
 
                 replace_all(doc, replacements)
-                format_risk_assessment(doc)
+
+                # Do not call format_risk_assessment(doc)
+                # This keeps the original Word template font for Lifting Plan.
 
                 buffer = BytesIO()
                 doc.save(buffer)
@@ -1527,6 +1544,8 @@ Lifting Equipment:
 Communication:
 {{coms_y}} Yes
 {{coms_n}} No
+{{shs}} Standard hand signals
+{{rad}} Radio
 
 Physical / Environmental:
 {{gc_y}} Yes    {{gc_n}} No
