@@ -659,10 +659,7 @@ if page == "🏗️ Lifting Plan":
         lifting_gear_manual = st.text_area(
             "Type of Lifting Gears",
             height=120,
-            value="""Wire rope slings / webbing slings
-Shackles
-Timber mats / steel plates
-Tag lines""",
+            value="Wire rope slings / webbing slings, Shackles, Timber mats / steel plates, Tag lines",
             key="lifting_gear_manual"
         )
 
