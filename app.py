@@ -621,7 +621,7 @@ job_scope
 # ======================================================
 if page == "🏗️ Lifting Plan":
     st.markdown("## 🏗️ Lifting Plan / Permit to Work")
-    st.caption("Fill in the lifting details according to your lifting plan template.")
+    st.caption("Fill in all lifting details according to your template placeholders.")
 
     with st.expander("1. General", expanded=True):
         lp_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="lp_company")
@@ -629,12 +629,18 @@ if page == "🏗️ Lifting Plan":
         lp_location = st.text_input("Location of Lifting Operation", key="lp_location")
         lp_date_input = st.date_input("Date", value=date.today(), key="lp_date_input")
         lp_operation_time = st.text_input("Operation Time", key="lp_operation_time")
+        lp_validity = st.text_input("Validity Period", "1 Day", key="lp_validity")
 
     with st.expander("2. Details of Loads to be Hoist", expanded=True):
         lp_description = st.text_area("Description of Load", key="lp_description")
         lp_machine = st.text_input("Machine Name / Spec", key="lp_machine")
         lp_machine_dimension = st.text_input("Overall Dimension of Load", key="lp_machine_dimension")
         lp_machine_weight = st.text_input("Weight of Load", key="lp_machine_weight")
+        lp_center_gravity = st.selectbox(
+            "Centre of Gravity",
+            ["Obvious", "Estimated", "Determined by drawing"],
+            key="lp_center_gravity"
+        )
 
     with st.expander("3. Details of Lifting Equipment", expanded=True):
         lifting_equipment_type = st.selectbox(
@@ -644,8 +650,8 @@ if page == "🏗️ Lifting Plan":
         )
 
         lifting_gear_manual = st.text_area(
-            "Type of Lifting Gears / Equipment Details",
-            height=160,
+            "Type of Lifting Gears",
+            height=120,
             value="""Wire rope slings / webbing slings
 Shackles
 Timber mats / steel plates
@@ -653,43 +659,60 @@ Tag lines""",
             key="lifting_gear_manual"
         )
 
-        crane_name = st.text_input("LM / LE Registration No. / Crane Name", key="crane_name")
+        crane_name = st.text_input("LM / LE Registration No.", key="crane_name")
         crane_renew = st.text_input("Date of Last Certification", key="crane_renew")
         crane_expiry = st.text_input("Expiry Date of Certificate", key="crane_expiry")
         crane_swl = st.text_input("Max Safe Working Load", key="crane_swl")
+        boom_length = st.text_input("Max Boom / Jig Length", key="boom_length")
         crane_radius = st.text_input("Intended Load Radius", key="crane_radius")
         crane_swl_radius = st.text_input("SWL at This Radius", key="crane_swl_radius")
         total_swl_lg = st.text_input("SWL of Lifting Gear", key="total_swl_lg")
         lg_weight = st.text_input("Combined Weight of Lifting Gears", key="lg_weight")
         lg_expiry = st.text_input("Expiry Date of Lifting Gear Certificate", key="lg_expiry")
 
-    with st.expander("4. Personnel Involved", expanded=True):
-        site_supervisor = st.text_input("Site Supervisor", key="site_supervisor")
-        lifting_supervisor = st.text_input("Lifting Supervisor", key="lifting_supervisor")
-        equipment_operator = st.text_input("Lifting Equipment Operator", key="equipment_operator")
-        rigger_1 = st.text_input("Rigger / Signalman 1", key="rigger_1")
-        rigger_2 = st.text_input("Rigger / Signalman 2", key="rigger_2")
+    with st.expander("4. Means of Communication", expanded=True):
+        operator_can_see = st.checkbox("Operator can see loading / unloading position", value=True, key="operator_can_see")
+        communication_method = st.text_input("Communication Method", "Standard hand signals", key="communication_method")
 
-    with st.expander("5. Physical and Environmental Considerations", expanded=True):
+    with st.expander("5. Personnel Involved", expanded=True):
+        site_supervisor = st.text_input("Site Supervisor", "Ibrahim / Zahari / Zaharin / Wong Yen Siong", key="site_supervisor")
+        lifting_supervisor = st.text_input("Lifting Supervisor", "Ibrahim / Zahari / Zaharin / Wong Yen Siong", key="lifting_supervisor")
+        equipment_operator = st.text_input("Lifting Equipment Operator", "Lim Poh Soon / Norhalim / Lim Poh Thian / Ngaimin / Azmi", key="equipment_operator")
+        rigger_1 = st.text_input("Rigger / Signalman 1", "Rizal / Hanifah / Aziz / Jamari / Ahmad", key="rigger_1")
+        rigger_2 = st.text_input("Rigger / Signalman 2", "Rahman / Malik / Sarawanan / Sing Kwok Liang", key="rigger_2")
+
+    with st.expander("6. Physical and Environmental Considerations", expanded=True):
         ground_safe = st.checkbox("Ground Safe", value=True, key="ground_safe")
         outriggers = st.checkbox("Outriggers Extended", value=True, key="outriggers")
         no_overhead_obstacles = st.checkbox("No Overhead Obstacles", value=True, key="no_overhead_obstacles")
+        no_obstruction = st.checkbox("No obstruction from structure / equipment / stacked materials", value=True, key="no_obstruction")
         lighting = st.checkbox("Lighting Adequate", value=True, key="lighting")
-        barricade = st.checkbox("Area Barricaded", value=True, key="barricade")
+        barricade = st.checkbox("Area Barricaded / Demarcated", value=True, key="barricade")
+        other_precautions = st.text_area("Other Precautions", "To ensure lifting zone is clear and unauthorised access is prevented.", key="other_precautions")
 
-    with st.expander("6. Tasks", expanded=True):
+    with st.expander("7. Tasks", expanded=True):
         task_sequence = st.text_area(
             "Sequence of Lifting Operations",
-            height=220,
-            value="""1. Deploy crane / lorry loader at designated unloading area
-2. Set up outriggers fully extended and rest on timber mats / steel plates
-3. Carry out rigging and hook-on
-4. Conduct trial lift
-5. Hoist load slowly and steadily
-6. Shift load to designated position
-7. Lower load in a controlled manner
-8. Remove lifting gear and carry out housekeeping""",
+            height=260,
+            value="""1. Deploy lorry loader / crane at designated unloading area
+2. Set up crane with outriggers fully extended and resting on timber mats / base plate
+3. Rigger to insert sling to crane hook
+4. Secure sling to rigging point of load
+5. Conduct trial lift to confirm load stability
+6. Hoist load slowly and steadily
+7. Transport machine to door entrance / designated area
+8. Using pallet truck / roller to shift and position machine
+9. Position at the designated location
+10. Once job complete, carry out proper housekeeping
+11. All debris to be cleared and disposed
+12. Job complete""",
             key="task_sequence"
+        )
+
+        person_in_charge = st.text_input(
+            "Person In Charge for Each Step",
+            "Zahari / Ibrahim / Wong Yen Siong",
+            key="person_in_charge"
         )
 
     generate_lp = st.button("🏗️ Generate Lifting Plan", key="generate_lp")
@@ -697,44 +720,21 @@ Tag lines""",
     if generate_lp:
         try:
             with st.spinner("Generating Lifting Plan..."):
-                prompt = f"""
-Improve and professionalize this lifting method for a lifting plan in Singapore.
-
-Company: {lp_company}
-Project: {lp_project_name}
-Location: {lp_location}
-Description: {lp_description}
-Machine: {lp_machine}
-Machine dimension: {lp_machine_dimension}
-Machine weight: {lp_machine_weight}
-Crane name: {crane_name}
-Crane SWL: {crane_swl}
-Crane radius: {crane_radius}
-SWL at radius: {crane_swl_radius}
-Type of lifting equipment selected: {lifting_equipment_type}
-Type of lifting gears / equipment details:
-{lifting_gear_manual}
-
-Sequence of lifting operations:
-{task_sequence}
-
-Generate:
-- lifting_gear
-- lifting_method
-- safety_controls
-
-Rules:
-- Use formal lifting-plan wording.
-- Return plain text only.
-- No dictionary-looking text.
-- Do not include explanation, justification, summary, or reference to company format.
-- Return only the actual content to be inserted into the Word document.
-- lifting_gear may be generated but will be overridden by user's manual input.
-"""
 
                 response = client.responses.create(
                     model="gpt-5.4",
-                    input=prompt,
+                    input=f"""
+Improve this lifting task sequence into formal lifting plan wording.
+
+Task sequence:
+{task_sequence}
+
+Return JSON only:
+{{
+ "lifting_method": "",
+ "safety_controls": ""
+}}
+""",
                     tools=[{
                         "type": "file_search",
                         "vector_store_ids": [LP_VECTOR_STORE_ID]
@@ -747,11 +747,10 @@ Rules:
                                 "type": "object",
                                 "additionalProperties": False,
                                 "properties": {
-                                    "lifting_gear": {"type": "string"},
                                     "lifting_method": {"type": "string"},
                                     "safety_controls": {"type": "string"}
                                 },
-                                "required": ["lifting_gear", "lifting_method", "safety_controls"]
+                                "required": ["lifting_method", "safety_controls"]
                             }
                         }
                     }
@@ -767,35 +766,61 @@ Rules:
                     "{{date}}": str(lp_date_input),
                     "{{operation_date}}": str(lp_date_input),
                     "{{operation_time}}": lp_operation_time,
+                    "{{validity_period}}": lp_validity,
+
                     "{{description_of_work}}": lp_description,
                     "{{machine_spec}}": lp_machine,
                     "{{machine_name}}": lp_machine,
                     "{{machine_dimension}}": lp_machine_dimension,
                     "{{machine_weight}}": lp_machine_weight,
+
+                    "{{center_gravity_obvious}}": "☒" if lp_center_gravity == "Obvious" else "☐",
+                    "{{center_gravity_estimated}}": "☒" if lp_center_gravity == "Estimated" else "☐",
+                    "{{center_gravity_drawing}}": "☒" if lp_center_gravity == "Determined by drawing" else "☐",
+
+                    "{{mobile_crane_checked}}": "☒" if lifting_equipment_type == "Mobile crane" else "☐",
+                    "{{lorry_loader_checked}}": "☒" if lifting_equipment_type == "Lorry loader" else "☐",
+
                     "{{crane_name}}": crane_name,
                     "{{crane_renew}}": crane_renew,
                     "{{crane_expiry}}": crane_expiry,
                     "{{crane_swl}}": crane_swl,
+                    "{{boom_length}}": boom_length,
                     "{{crane_radius}}": crane_radius,
                     "{{crane_swl_radius}}": crane_swl_radius,
-                    "{{total_swl_lg}}": total_swl_lg,
-                    "{{lg_weight}}": lg_weight,
-                    "{{lg_expiry}}": lg_expiry,
                     "{{lifting_gear}}": lifting_gear_manual,
-                    "{{lifting_method}}": data["lifting_method"],
-                    "{{safety_controls}}": data["safety_controls"],
-                    "{{mobile_crane_checked}}": "☒" if lifting_equipment_type == "Mobile crane" else "☐",
-                    "{{lorry_loader_checked}}": "☒" if lifting_equipment_type == "Lorry loader" else "☐",
+                    "{{lg_weight}}": lg_weight,
+                    "{{total_swl_lg}}": total_swl_lg,
+                    "{{lg_expiry}}": lg_expiry,
+
+                    "{{operator_can_see_yes}}": "☒" if operator_can_see else "☐",
+                    "{{operator_can_see_no}}": "☐" if operator_can_see else "☒",
+                    "{{communication_method}}": communication_method,
+
                     "{{site_supervisor}}": site_supervisor,
                     "{{lifting_supervisor}}": lifting_supervisor,
                     "{{equipment_operator}}": equipment_operator,
                     "{{rigger_1}}": rigger_1,
                     "{{rigger_2}}": rigger_2,
-                    "{{ground_safe}}": "Yes" if ground_safe else "No",
-                    "{{outriggers}}": "Yes" if outriggers else "No",
-                    "{{obstacles}}": "No" if no_overhead_obstacles else "Yes",
-                    "{{lighting}}": "Yes" if lighting else "No",
-                    "{{barricade}}": "Yes" if barricade else "No",
+
+                    "{{ground_safe_yes}}": "☒" if ground_safe else "☐",
+                    "{{ground_safe_no}}": "☐" if ground_safe else "☒",
+                    "{{outriggers_yes}}": "☒" if outriggers else "☐",
+                    "{{outriggers_no}}": "☐" if outriggers else "☒",
+                    "{{obstacles_yes}}": "☐" if no_overhead_obstacles else "☒",
+                    "{{obstacles_no}}": "☒" if no_overhead_obstacles else "☐",
+                    "{{obstruction_yes}}": "☐" if no_obstruction else "☒",
+                    "{{obstruction_no}}": "☒" if no_obstruction else "☐",
+                    "{{lighting_yes}}": "☒" if lighting else "☐",
+                    "{{lighting_no}}": "☐" if lighting else "☒",
+                    "{{barricade_yes}}": "☒" if barricade else "☐",
+                    "{{barricade_no}}": "☐" if barricade else "☒",
+                    "{{other_precautions}}": other_precautions,
+
+                    "{{task_sequence}}": task_sequence,
+                    "{{lifting_method}}": data["lifting_method"],
+                    "{{safety_controls}}": data["safety_controls"],
+                    "{{person_in_charge}}": person_in_charge,
                     "{{prepared_by}}": "Kevin Wong / Zailani"
                 })
 
@@ -813,7 +838,7 @@ Rules:
         except Exception as e:
             st.error("Lifting Plan generation failed")
             st.exception(e)
-
+        
 
 # ======================================================
 # RISK ASSESSMENT PRO
