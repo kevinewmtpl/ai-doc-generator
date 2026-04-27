@@ -977,7 +977,6 @@ if page == "🧰 Lifting Gear Register":
 
     if not os.path.exists(CERT_FOLDER):
         st.error("Folder not found: Lifting Gears Certificate")
-        st.write("Please make sure your GitHub folder name is exactly:")
         st.code("Lifting Gears Certificate")
     else:
         files = [
@@ -992,18 +991,29 @@ if page == "🧰 Lifting Gear Register":
         else:
             st.success(f"Found {len(files)} certificate file(s).")
 
-            search = st.text_input("Search certificate", "")
+            search = st.text_input(
+                "Search by SWL / keyword",
+                "",
+                placeholder="Example: 3 Ton, 10 Ton, shackle, round sling"
+            )
 
-            filtered_files = [
-                f for f in files
-                if search.lower() in f.lower()
-            ]
+            filtered_files = files
+
+            if search:
+                search_words = search.lower().split()
+
+                filtered_files = [
+                    f for f in files
+                    if all(word in f.lower() for word in search_words)
+                ]
 
             if not filtered_files:
                 st.warning("No matching certificate found.")
             else:
+                st.success(f"Found {len(filtered_files)} matching certificate(s).")
+
                 selected_file = st.selectbox(
-                    "Select certificate",
+                    "Choose from similar certificates",
                     filtered_files
                 )
 
