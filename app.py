@@ -34,9 +34,6 @@ PAGES = [
 if "page" not in st.session_state:
     st.session_state.page = "🏠 Dashboard"
 
-if "sidebar_navigation" not in st.session_state:
-    st.session_state.sidebar_navigation = st.session_state.page
-
 # =====================
 # PREMIUM UI STYLE
 # =====================
@@ -178,7 +175,6 @@ LP_TEMPLATE = os.path.join(BASE_DIR, "Templates", "Lifting Plan Template.docx")
 # =====================
 def go_to_page(page_name):
     st.session_state.page = page_name
-    st.session_state.sidebar_navigation = page_name
     st.rerun()
 
 
@@ -421,8 +417,7 @@ with st.sidebar:
     selected_page = st.radio(
         "Navigation",
         PAGES,
-        index=PAGES.index(st.session_state.sidebar_navigation),
-        key="sidebar_navigation"
+        index=PAGES.index(st.session_state.page)
     )
 
     st.session_state.page = selected_page
