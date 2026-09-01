@@ -1,8 +1,12 @@
 import os
 import json
 import base64
+import hmac
+from urllib.parse import quote
 from io import BytesIO
 from datetime import date
+
+import requests
 
 import streamlit as st
 from openai import OpenAI
@@ -682,6 +686,366 @@ def certificate_browser(folder_name, title, info_text, search_label, search_plac
 
     if selected_file.lower().endswith(".docx"):
         st.info("Word document preview is not supported inside Streamlit. Please download the file to view.")
+
+# =====================
+# GITHUB DOCUMENT MANAGEMENT
+# =====================
+def get_secret(name, default=None):
+    """Safely read a Streamlit secret without exposing it in the UI."""
+    try:
+        return st.secrets[name]
+    except Exception:
+        return default
+
+
+def github_settings():
+    return {
+        "token": get_secret("GITHUB_TOKEN", ""),
+        "repo": get_secret("GITHUB_REPO", ""),
+        "branch": get_secret("GITHUB_BRANCH", "main"),
+    }
+
+
+def github_headers():
+    cfg = github_settings()
+    return {
+        "Authorization": f"Bearer {cfg['token']}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "EWMT-Streamlit-Document-Manager",
+    }
+
+
+def github_api_url(path=""):
+    cfg = github_settings()
+    repo = cfg["repo"].strip().strip("/")
+    safe_path = quote(path.strip("/"), safe="/")
+    base = f"https://api.github.com/repos/{repo}/contents"
+    return f"{base}/{safe_path}" if safe_path else base
+
+
+def validate_github_config():
+    cfg = github_settings()
+    missing = []
+
+    if not get_secret("ADMIN_PASSWORD", ""):
+        missing.append("ADMIN_PASSWORD")
+    if not cfg["token"]:
+        missing.append("GITHUB_TOKEN")
+    if not cfg["repo"]:
+        missing.append("GITHUB_REPO")
+
+    return missing
+
+
+def github_get_file(path):
+    """Return GitHub file metadata or None when the file does not exist."""
+    cfg = github_settings()
+    response = requests.get(
+        github_api_url(path),
+        headers=github_headers(),
+        params={"ref": cfg["branch"]},
+        timeout=30,
+    )
+
+    if response.status_code == 404:
+        return None
+
+    response.raise_for_status()
+    return response.json()
+
+
+def github_list_folder(folder_path):
+    cfg = github_settings()
+    response = requests.get(
+        github_api_url(folder_path),
+        headers=github_headers(),
+        params={"ref": cfg["branch"]},
+        timeout=30,
+    )
+
+    if response.status_code == 404:
+        return []
+
+    response.raise_for_status()
+    data = response.json()
+
+    if isinstance(data, dict):
+        data = [data]
+
+    return sorted(
+        [item for item in data if item.get("type") == "file"],
+        key=lambda item: item.get("name", "").lower(),
+    )
+
+
+def github_upload_file(folder_path, filename, file_bytes, replace_existing=False):
+    cfg = github_settings()
+    filename = os.path.basename(filename).strip()
+
+    if not filename:
+        raise ValueError("Invalid file name.")
+
+    target_path = f"{folder_path.strip('/')}/{filename}"
+    existing = github_get_file(target_path)
+
+    if existing and not replace_existing:
+        raise FileExistsError(
+            "A file with the same name already exists. Tick 'Replace existing file' to overwrite it."
+        )
+
+    payload = {
+        "message": f"EWMT document upload: {target_path}",
+        "content": base64.b64encode(file_bytes).decode("utf-8"),
+        "branch": cfg["branch"],
+    }
+
+    if existing:
+        payload["sha"] = existing["sha"]
+
+    response = requests.put(
+        github_api_url(target_path),
+        headers=github_headers(),
+        json=payload,
+        timeout=60,
+    )
+
+    if response.status_code not in (200, 201):
+        try:
+            detail = response.json().get("message", response.text)
+        except Exception:
+            detail = response.text
+        raise RuntimeError(f"GitHub upload failed: {detail}")
+
+    return response.json()
+
+
+def github_delete_file(folder_path, filename, sha):
+    cfg = github_settings()
+    filename = os.path.basename(filename).strip()
+    target_path = f"{folder_path.strip('/')}/{filename}"
+
+    payload = {
+        "message": f"EWMT document delete: {target_path}",
+        "sha": sha,
+        "branch": cfg["branch"],
+    }
+
+    response = requests.delete(
+        github_api_url(target_path),
+        headers=github_headers(),
+        json=payload,
+        timeout=60,
+    )
+
+    if response.status_code != 200:
+        try:
+            detail = response.json().get("message", response.text)
+        except Exception:
+            detail = response.text
+        raise RuntimeError(f"GitHub delete failed: {detail}")
+
+    return response.json()
+
+
+def admin_is_logged_in():
+    return bool(st.session_state.get("admin_authenticated", False))
+
+
+def admin_login_form():
+    st.markdown("### 🔐 Administrator Access")
+    st.caption("Only authorised administrators can upload, replace or delete company documents.")
+
+    with st.form("admin_login_form", clear_on_submit=False):
+        password = st.text_input("Administrator Password", type="password")
+        login = st.form_submit_button("🔓 Login as Administrator", use_container_width=True)
+
+    if login:
+        saved_password = str(get_secret("ADMIN_PASSWORD", ""))
+
+        if not saved_password:
+            st.error("ADMIN_PASSWORD is not configured in Streamlit Secrets.")
+            return False
+
+        if hmac.compare_digest(str(password), saved_password):
+            st.session_state.admin_authenticated = True
+            st.success("Administrator access granted.")
+            st.rerun()
+        else:
+            st.error("Incorrect administrator password.")
+
+    return False
+
+
+def render_admin_document_manager():
+    st.markdown("### 📁 Admin Document Manager")
+    st.caption(
+        "Upload new certificates, replace renewed certificates and delete obsolete files. "
+        "Changes are committed directly to your GitHub repository."
+    )
+
+    missing = validate_github_config()
+    if missing:
+        st.error("Missing Streamlit Secrets: " + ", ".join(missing))
+        st.info(
+            "Add ADMIN_PASSWORD, GITHUB_TOKEN, GITHUB_REPO and optionally GITHUB_BRANCH "
+            "in Streamlit Cloud → App settings → Secrets."
+        )
+        return
+
+    cfg = github_settings()
+
+    top_left, top_right = st.columns([3, 1])
+    with top_left:
+        st.info(f"Repository: {cfg['repo']}  •  Branch: {cfg['branch']}")
+    with top_right:
+        if st.button("🔒 Logout", key="admin_logout", use_container_width=True):
+            st.session_state.admin_authenticated = False
+            st.rerun()
+
+    folder_map = {
+        "🧰 Lifting Gear Certificates": "Lifting Gears Certificate",
+        "👷 Worker Training Certificates": "Workers Certificate",
+    }
+
+    selected_type = st.selectbox(
+        "Document Category",
+        list(folder_map.keys()),
+        key="admin_document_category",
+    )
+    selected_folder = folder_map[selected_type]
+
+    st.markdown(f"#### Current Files — `{selected_folder}`")
+
+    try:
+        github_files = github_list_folder(selected_folder)
+    except Exception as e:
+        st.error("Unable to read documents from GitHub.")
+        st.exception(e)
+        github_files = []
+
+    if github_files:
+        search_admin = st.text_input(
+            "Search current files",
+            placeholder="Type worker name, sling, shackle, expiry date...",
+            key=f"admin_search_{selected_folder}",
+        )
+
+        shown_files = github_files
+        if search_admin:
+            words = search_admin.lower().split()
+            shown_files = [
+                item for item in github_files
+                if all(word in item.get("name", "").lower() for word in words)
+            ]
+
+        st.caption(f"{len(shown_files)} file(s) shown • {len(github_files)} total")
+
+        if not shown_files:
+            st.warning("No matching file found.")
+        else:
+            for item in shown_files:
+                filename = item.get("name", "")
+                size_bytes = int(item.get("size", 0) or 0)
+                size_kb = size_bytes / 1024
+
+                with st.container(border=True):
+                    c1, c2 = st.columns([5, 1])
+                    with c1:
+                        st.markdown(f"**{filename}**")
+                        st.caption(f"{size_kb:,.1f} KB")
+                    with c2:
+                        if item.get("html_url"):
+                            st.link_button(
+                                "View",
+                                item["html_url"],
+                                use_container_width=True,
+                            )
+
+                    delete_confirm = st.checkbox(
+                        f"I confirm I want to permanently delete {filename}",
+                        key=f"delete_confirm_{selected_folder}_{item.get('sha', filename)}",
+                    )
+
+                    if st.button(
+                        "🗑 Delete Permanently",
+                        key=f"delete_{selected_folder}_{item.get('sha', filename)}",
+                        disabled=not delete_confirm,
+                        use_container_width=True,
+                    ):
+                        try:
+                            with st.spinner(f"Deleting {filename}..."):
+                                github_delete_file(selected_folder, filename, item["sha"])
+                            st.success(f"Deleted: {filename}")
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error("Delete failed.")
+                            st.exception(e)
+    else:
+        st.warning("No documents found in this GitHub folder, or the folder does not exist yet.")
+
+    st.markdown("---")
+    st.markdown("#### ⬆ Upload / Replace Document")
+
+    allowed_types = ["pdf", "png", "jpg", "jpeg", "docx"]
+    uploaded_file = st.file_uploader(
+        "Choose document",
+        type=allowed_types,
+        key=f"admin_upload_{selected_folder}",
+    )
+
+    if uploaded_file is not None:
+        default_name = os.path.basename(uploaded_file.name)
+        upload_name = st.text_input(
+            "File name in GitHub",
+            value=default_name,
+            key=f"admin_filename_{selected_folder}",
+        )
+
+        replace_existing = st.checkbox(
+            "Replace existing file if the same filename already exists",
+            value=False,
+            key=f"admin_replace_{selected_folder}",
+        )
+
+        st.info(
+            "Tip: for lifting gear expiry alerts, include the expiry date in the filename, "
+            "for example: 10 Ton Shackle Expiry 2027-08-31.pdf"
+        )
+
+        if st.button(
+            "⬆ Upload Document",
+            key=f"admin_upload_button_{selected_folder}",
+            use_container_width=True,
+        ):
+            clean_name = os.path.basename(upload_name).strip()
+            extension = clean_name.rsplit(".", 1)[-1].lower() if "." in clean_name else ""
+
+            if not clean_name:
+                st.error("Please enter a valid file name.")
+            elif extension not in allowed_types:
+                st.error("Allowed file types: PDF, PNG, JPG, JPEG and DOCX.")
+            else:
+                try:
+                    with st.spinner(f"Uploading {clean_name}..."):
+                        github_upload_file(
+                            selected_folder,
+                            clean_name,
+                            uploaded_file.getvalue(),
+                            replace_existing=replace_existing,
+                        )
+                    st.success(f"Uploaded successfully: {clean_name}")
+                    st.info(
+                        "GitHub has been updated. Streamlit Cloud normally redeploys automatically "
+                        "after the repository changes."
+                    )
+                    st.cache_data.clear()
+                except FileExistsError as e:
+                    st.warning(str(e))
+                except Exception as e:
+                    st.error("Upload failed.")
+                    st.exception(e)
 
 # =====================
 # DASHBOARD COUNT FUNCTIONS
@@ -1687,15 +2051,20 @@ if page == "⏰ Expiry Alerts":
 
 
 # ======================================================
-# SETTINGS
+# SETTINGS / ADMIN DOCUMENT MANAGER
 # ======================================================
 if page == "⚙️ Settings":
-    st.markdown("## ⚙️ Settings")
-    st.info("This module can be added next: manage default names, templates and company settings.")
+    st.markdown("## ⚙️ Settings / Administrator")
+    st.caption("Secure document control and template reference for the EWMT internal system.")
 
-    st.markdown("### Method Statement Placeholder Guide")
+    if not admin_is_logged_in():
+        admin_login_form()
+    else:
+        render_admin_document_manager()
 
-    st.code("""
+    st.markdown("---")
+    with st.expander("📄 Method Statement Placeholder Guide"):
+        st.code("""
 Use these placeholders in your Method Statement Word template:
 
 {{date}}
@@ -1713,9 +2082,8 @@ Use these placeholders in your Method Statement Word template:
 {{prepared_by}}
 """)
 
-    st.markdown("### Lifting Plan Placeholder Guide")
-
-    st.code("""
+    with st.expander("🏗️ Lifting Plan Placeholder Guide"):
+        st.code("""
 Use these placeholders in your Lifting Plan Word template:
 
 General:
