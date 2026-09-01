@@ -2,9 +2,10 @@ import os
 import json
 import base64
 import hmac
+import re
 from urllib.parse import quote
 from io import BytesIO
-from datetime import date
+from datetime import date, timedelta
 
 import requests
 
@@ -13,6 +14,19 @@ from openai import OpenAI
 from docx import Document
 from docx.shared import Pt
 from docx.oxml.ns import qn
+
+# PowerPoint support is optional so the existing system continues to work
+# even before python-pptx is added to requirements.txt.
+try:
+    from pptx import Presentation
+    from pptx.util import Pt as PPTXPt
+    from pptx.enum.shapes import MSO_SHAPE_TYPE
+    PPTX_AVAILABLE = True
+except Exception:
+    Presentation = None
+    PPTXPt = None
+    MSO_SHAPE_TYPE = None
+    PPTX_AVAILABLE = False
 
 # =====================
 # PAGE CONFIG
@@ -29,6 +43,7 @@ st.set_page_config(
 PAGES = [
     "🏠 Dashboard",
     "📄 Method Statement",
+    "📑 Method Statement PRO",
     "🏗️ Lifting Plan",
     "⚠️ Risk Assessment Pro",
     "🧰 Lifting Gear Register",
@@ -61,6 +76,14 @@ ASSET_DIR = os.path.join(BASE_DIR, "assets")
 MS_TEMPLATE = os.path.join(BASE_DIR, "Templates", "Method of statement Template.docx")
 RA_TEMPLATE = os.path.join(BASE_DIR, "Templates", "RA Template.docx")
 LP_TEMPLATE = os.path.join(BASE_DIR, "Templates", "Lifting Plan Template.docx")
+
+# MOS PRO uses your PowerPoint as the master document.
+# The code accepts either filename so you can upload your current file without renaming it.
+MOS_PRO_TEMPLATE_CANDIDATES = [
+    os.path.join(BASE_DIR, "Templates", "MOS New.pptx"),
+    os.path.join(BASE_DIR, "Templates", "MOS New(1).pptx"),
+    os.path.join(BASE_DIR, "Templates", "Method Statement PRO.pptx"),
+]
 
 
 def image_to_base64(path):
@@ -1048,6 +1071,215 @@ def render_admin_document_manager():
                     st.exception(e)
 
 # =====================
+# METHOD STATEMENT PRO - POWERPOINT MASTER HELPERS
+# =====================
+def mos_pro_find_master_template():
+    """Return the first available MOS PRO PowerPoint master template."""
+    for path in MOS_PRO_TEMPLATE_CANDIDATES:
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def mos_pro_replace_text_in_paragraph(paragraph, replacements):
+    """Replace text while keeping the first run's original PowerPoint formatting."""
+    if not getattr(paragraph, "runs", None):
+        return 0
+
+    original = "".join(run.text for run in paragraph.runs)
+    updated = original
+
+    for pattern, replacement in replacements:
+        updated = re.sub(pattern, replacement, updated, flags=re.IGNORECASE)
+
+    if updated == original:
+        return 0
+
+    first_run = paragraph.runs[0]
+    for run in paragraph.runs:
+        run.text = ""
+    first_run.text = updated
+    return 1
+
+
+def mos_pro_replace_project_information(prs, data):
+    """
+    Update only the repeated project-information table in the master PPTX.
+    Standard procedure wording, drawings and existing slide contents are untouched.
+    """
+    replacements = [
+        (r"(Customer\s*/\s*Tenant\s*Company\s*:\s*)[^\r\n]*", rf"\g<1>{safe_text(data.get('customer'))}"),
+        (r"(Site\s*Location\s*:\s*)[^\r\n]*", rf"\g<1>{safe_text(data.get('location'))}"),
+        (r"(Process\s*:\s*)[^\r\n]*", rf"\g<1>{safe_text(data.get('process'))}"),
+        (r"(Prepared\s*by\s*:\s*)[^\r\n]*", rf"\g<1>{safe_text(data.get('prepared_by'))}"),
+        (r"(Approved\s*By\s*:\s*)[^\r\n]*", rf"\g<1>{safe_text(data.get('approved_by'))}"),
+        (r"(Last\s*Review\s*Date\s*:\s*)[^\r\n]*", rf"\g<1>{safe_text(data.get('last_review'))}"),
+        (r"(Next\s*Review\s*Date\s*:\s*)[^\r\n]*", rf"\g<1>{safe_text(data.get('next_review'))}"),
+    ]
+
+    changed = 0
+
+    def process_shape(shape):
+        nonlocal changed
+
+        # Recurse into groups, including the EWMT header group.
+        if MSO_SHAPE_TYPE is not None and shape.shape_type == MSO_SHAPE_TYPE.GROUP:
+            for child in shape.shapes:
+                process_shape(child)
+
+        if getattr(shape, "has_text_frame", False):
+            for paragraph in shape.text_frame.paragraphs:
+                changed += mos_pro_replace_text_in_paragraph(paragraph, replacements)
+
+        if getattr(shape, "has_table", False):
+            for row in shape.table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.text_frame.paragraphs:
+                        changed += mos_pro_replace_text_in_paragraph(paragraph, replacements)
+
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            process_shape(shape)
+
+    return changed
+
+
+def mos_pro_find_work_method_shape(prs):
+    """Locate the existing 'Work Method Statement for Lifting Operation' text box."""
+    for slide_index, slide in enumerate(prs.slides):
+        for shape in slide.shapes:
+            if getattr(shape, "has_text_frame", False):
+                txt = shape.text or ""
+                if "Work Method Statement for Lifting Operation" in txt:
+                    return slide_index, shape
+    return None, None
+
+
+def mos_pro_write_work_method(shape, work_method_text):
+    """Replace only the existing work-method textbox, leaving the slide header/footer untouched."""
+    tf = shape.text_frame
+    tf.clear()
+    tf.word_wrap = True
+
+    title = tf.paragraphs[0]
+    title.text = "Work Method Statement for Lifting Operation:"
+    if title.runs:
+        title.runs[0].font.bold = True
+        title.runs[0].font.size = PPTXPt(13)
+
+    intro = tf.add_paragraph()
+    intro.text = "The following project-specific work method shall be carried out for the lifting / machinery moving operation:"
+    if intro.runs:
+        intro.runs[0].font.size = PPTXPt(9.5)
+
+    lines = [line.strip() for line in str(work_method_text).splitlines() if line.strip()]
+    for line in lines:
+        p = tf.add_paragraph()
+        p.text = line
+        if p.runs:
+            p.runs[0].font.size = PPTXPt(9.2)
+
+
+def mos_pro_generate_work_method(description, machine, equipment, site_notes, operation_type):
+    prompt = f"""
+Prepare ONLY the project-specific Work Method Statement steps for insertion into the EWMT professional MOS PowerPoint master.
+
+Follow the EWMT master standard and Singapore machinery-moving / lifting contractor wording.
+Do not rewrite the master safety procedure pages. The master already contains the standard WSH, lift classification, competent-person, crane-selection, ground/outrigger, pre-start and emergency sections.
+
+PROJECT OPERATION
+Operation type: {operation_type}
+Description of work: {description}
+Machine / load: {machine}
+Equipment actually intended: {equipment}
+Site / access notes: {site_notes}
+
+Requirements:
+- Produce 10 to 18 concise numbered work steps only.
+- Use only equipment actually stated by the user. Do not invent cranes, forklifts or lifting gear.
+- Include site briefing / toolbox meeting before commencement.
+- Include barricading / exclusion-zone control when relevant.
+- If a crane or lorry loader is used: verify load weight, lifting points, radius, SWL/load chart, lifting gear, ground/outrigger support, trial lift and tag-line control where applicable.
+- If machinery is shifted on floor: include floor protection, jacking / skates / forklift only when stated.
+- Include controlled movement, final positioning, de-rigging and housekeeping.
+- Include a STOP WORK step if actual site conditions differ from the approved plan or become unsafe.
+- Do not include generic commentary, conclusions or explanations.
+- Return plain numbered steps in a single string.
+"""
+
+    response = client.responses.create(
+        model="gpt-5.4",
+        input=prompt,
+        tools=[{
+            "type": "file_search",
+            "vector_store_ids": [MS_VECTOR_STORE_ID]
+        }],
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "mos_pro_work_method_schema",
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "work_method": {"type": "string"}
+                    },
+                    "required": ["work_method"]
+                }
+            }
+        }
+    )
+
+    result = json.loads(response.output_text)
+    return clean_ms_text(result.get("work_method", ""))
+
+
+def mos_pro_build_powerpoint(project_data, replace_work_method=False, work_method_data=None):
+    if not PPTX_AVAILABLE:
+        raise RuntimeError("python-pptx is not installed. Add python-pptx to requirements.txt and redeploy Streamlit.")
+
+    master_path = mos_pro_find_master_template()
+    if not master_path:
+        raise FileNotFoundError(
+            "MOS PRO master template not found. Upload 'MOS New.pptx' (or 'MOS New(1).pptx') into the Templates folder."
+        )
+
+    prs = Presentation(master_path)
+    changed_fields = mos_pro_replace_project_information(prs, project_data)
+
+    replaced_work_method = False
+    work_method_slide = None
+
+    if replace_work_method:
+        work_method_data = work_method_data or {}
+        generated = mos_pro_generate_work_method(
+            work_method_data.get("description", ""),
+            work_method_data.get("machine", ""),
+            work_method_data.get("equipment", ""),
+            work_method_data.get("site_notes", ""),
+            work_method_data.get("operation_type", ""),
+        )
+        slide_index, shape = mos_pro_find_work_method_shape(prs)
+        if shape is None:
+            raise RuntimeError("Could not locate the existing Work Method Statement page in the master PowerPoint.")
+        mos_pro_write_work_method(shape, generated)
+        replaced_work_method = True
+        work_method_slide = slide_index + 1
+
+    output = BytesIO()
+    prs.save(output)
+    output.seek(0)
+
+    return output, {
+        "master": os.path.basename(master_path),
+        "slides": len(prs.slides),
+        "changed_fields": changed_fields,
+        "work_method_replaced": replaced_work_method,
+        "work_method_slide": work_method_slide,
+    }
+
+
+# =====================
 # DASHBOARD COUNT FUNCTIONS
 # =====================
 def count_files_in_folder(folder_name, allowed_ext=(".pdf", ".png", ".jpg", ".jpeg", ".docx")):
@@ -1136,6 +1368,9 @@ with st.sidebar:
     if st.button("📄 Method Statement", key="side_method_statement"):
         go_to_page("📄 Method Statement")
 
+    if st.button("📑 Method Statement PRO", key="side_method_statement_pro"):
+        go_to_page("📑 Method Statement PRO")
+
     if st.button("🏗️ Lifting Plan", key="side_lifting_plan"):
         go_to_page("🏗️ Lifting Plan")
 
@@ -1184,8 +1419,8 @@ if page == "🏠 Dashboard":
         st.markdown(f"""
         <div class="metric-card">
             <div class="metric-label">Document Modules</div>
-            <div class="metric-value">3</div>
-            <div class="metric-small">Method Statement / RA / Lifting Plan</div>
+            <div class="metric-value">4</div>
+            <div class="metric-small">Method Statement / MOS PRO / RA / Lifting Plan</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -1266,6 +1501,19 @@ if page == "🏠 Dashboard":
 
         if st.button("Open Risk Assessment", key="open_ra"):
             go_to_page("⚠️ Risk Assessment Pro")
+
+    pro_col1, pro_col2, pro_col3 = st.columns(3)
+
+    with pro_col1:
+        dashboard_card(
+            "📑 Method Statement PRO",
+            "Develop the professional PowerPoint MOS using your existing EWMT master file while keeping the current Word MOS untouched.",
+            METHOD_IMAGE,
+            "POWERPOINT MASTER"
+        )
+
+        if st.button("Open Method Statement PRO", key="open_ms_pro"):
+            go_to_page("📑 Method Statement PRO")
 
     st.markdown('<div class="section-title">Certificate / Records Modules</div>', unsafe_allow_html=True)
 
@@ -1465,6 +1713,193 @@ job_scope
         except Exception as e:
             st.error("Method Statement generation failed")
             st.exception(e)
+
+
+
+# ======================================================
+# METHOD STATEMENT PRO - POWERPOINT MASTER
+# ======================================================
+if page == "📑 Method Statement PRO":
+    st.markdown("## 📑 Method Statement PRO")
+    st.caption("Experimental professional MOS built from your existing EWMT PowerPoint master. The normal Word Method Statement remains untouched and continues to work separately.")
+
+    master_path = mos_pro_find_master_template()
+
+    if not PPTX_AVAILABLE:
+        st.error("MOS PRO requires `python-pptx`. Add `python-pptx` to requirements.txt and redeploy the app.")
+    elif not master_path:
+        st.error("MOS PRO master PowerPoint not found.")
+        st.code("Templates/MOS New.pptx")
+        st.info("Upload your supplied MOS PowerPoint into the Templates folder. The code also accepts `MOS New(1).pptx`.")
+    else:
+        try:
+            preview_prs = Presentation(master_path)
+            st.success(f"Master loaded: {os.path.basename(master_path)} • {len(preview_prs.slides)} pages")
+        except Exception as exc:
+            st.error(f"Master template could not be opened: {exc}")
+
+    st.info(
+        "SAFE DEVELOPMENT MODE: The PowerPoint master is copied first. Standard MOS wording, flowcharts, pictures, lifting pages and emergency procedure remain in place. "
+        "V1 only updates the repeated project-information block. The optional Work Method replacement is OFF by default."
+    )
+
+    with st.expander("1. Project Information — updates throughout the PowerPoint", expanded=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            pro_customer = st.text_input("Customer / Tenant Company", key="mospro_customer")
+            pro_location = st.text_input("Site Location", key="mospro_location")
+            pro_process = st.text_input(
+                "Process",
+                value="Lifting and Moving of Machinery",
+                key="mospro_process"
+            )
+            pro_prepared = st.text_input("Prepared By", value="Kevin Wong", key="mospro_prepared")
+        with c2:
+            pro_approved = st.text_input("Approved By", value="Eric Wong (Director)", key="mospro_approved")
+            pro_last_review = st.date_input("Last Review Date", value=date.today(), key="mospro_last_review")
+            pro_next_review = st.date_input("Next Review Date", value=date.today() + timedelta(days=365), key="mospro_next_review")
+
+        st.caption(
+            "These values replace the old customer/site/process/review information in the repeated header table on the master pages. "
+            "The MOS standard wording itself is not rewritten."
+        )
+
+    with st.expander("2. Optional Project-Specific Work Method — EXPERIMENTAL", expanded=False):
+        replace_pro_work_method = st.checkbox(
+            "Replace the existing Work Method Statement page with AI-generated project steps",
+            value=False,
+            key="mospro_replace_work_method"
+        )
+
+        st.warning(
+            "Leave this OFF while you are first testing the master-template system. "
+            "When ON, only the existing 'Work Method Statement for Lifting Operation' textbox is replaced."
+        )
+
+        pro_operation_type = st.selectbox(
+            "Operation Type",
+            [
+                "Ground Floor - Unload / Shift / Position",
+                "Ground Floor - Crane / Lorry Crane Hoisting",
+                "Upper Floor / Roof Hoisting",
+                "Indoor Machinery Shifting",
+                "Loading / Unloading Only",
+                "Custom / Other",
+            ],
+            key="mospro_operation_type"
+        )
+        pro_description = st.text_area("Description of Work", height=100, key="mospro_description")
+        pro_machine = st.text_input("Machine / Load — model, dimensions and weight", key="mospro_machine")
+        pro_equipment = st.text_area(
+            "Equipment Actually Intended for this Job",
+            height=90,
+            placeholder="Example: 50T mobile crane, 10T forklift, hydraulic jacks, machine skates, 4 x 5T webbing slings",
+            key="mospro_equipment"
+        )
+        pro_site_notes = st.text_area(
+            "Special Site / Access Notes",
+            height=90,
+            placeholder="Only enter job-specific information. Standard EWMT safety wording already exists in the master MOS.",
+            key="mospro_site_notes"
+        )
+
+    with st.expander("3. Master File Protection / Current V1 Scope", expanded=False):
+        st.markdown(
+            """
+**What V1 changes**
+- Customer / Tenant Company
+- Site Location
+- Process
+- Prepared By
+- Approved By
+- Last Review Date
+- Next Review Date
+- Optional: existing project Work Method page only
+
+**What V1 does NOT change**
+- EWMT company header / logo
+- Workplace Safety & Health standard pages
+- Objectives / Scope / Responsibilities
+- Routine / Non-Routine lift pages and flowcharts
+- Competent Person / Supervisor / Operator / Rigger / Signalman standards
+- Crane selection / ground / outriggers / pre-start standard wording
+- Existing drawings, certificates, lifting-plan pages and pictures
+- Emergency procedure page
+
+This keeps the PRO version safe to develop slowly while the current Word Method Statement continues operating independently.
+            """
+        )
+
+    generate_mos_pro = st.button(
+        "📑 Generate MOS PRO PowerPoint",
+        key="generate_mos_pro",
+        type="primary",
+        use_container_width=True
+    )
+
+    if generate_mos_pro:
+        required = {
+            "Customer / Tenant Company": pro_customer,
+            "Site Location": pro_location,
+            "Process": pro_process,
+            "Prepared By": pro_prepared,
+            "Approved By": pro_approved,
+        }
+        missing = [label for label, value in required.items() if not str(value).strip()]
+
+        if missing:
+            st.error("Please complete: " + ", ".join(missing))
+        elif replace_pro_work_method and not pro_description.strip():
+            st.error("Please enter Description of Work before replacing the Work Method page.")
+        else:
+            try:
+                with st.spinner("Copying EWMT master PowerPoint and applying project information..."):
+                    project_data = {
+                        "customer": pro_customer,
+                        "location": pro_location,
+                        "process": pro_process,
+                        "prepared_by": pro_prepared,
+                        "approved_by": pro_approved,
+                        "last_review": pro_last_review.strftime("%d.%m.%Y"),
+                        "next_review": pro_next_review.strftime("%d.%m.%Y"),
+                    }
+                    work_method_data = {
+                        "operation_type": pro_operation_type,
+                        "description": pro_description,
+                        "machine": pro_machine,
+                        "equipment": pro_equipment,
+                        "site_notes": pro_site_notes,
+                    }
+
+                    pro_buffer, pro_info = mos_pro_build_powerpoint(
+                        project_data,
+                        replace_work_method=replace_pro_work_method,
+                        work_method_data=work_method_data,
+                    )
+
+                st.success(
+                    f"MOS PRO generated from `{pro_info['master']}`. "
+                    f"{pro_info['slides']} pages preserved; {pro_info['changed_fields']} project-information text blocks updated."
+                )
+
+                if pro_info.get("work_method_replaced"):
+                    st.info(f"Experimental Work Method replacement applied on page {pro_info.get('work_method_slide')}.")
+                else:
+                    st.info("Standard master contents were preserved. Work Method replacement was not enabled.")
+
+                safe_customer = re.sub(r"[^A-Za-z0-9_-]+", "_", pro_customer.strip())[:45] or "Project"
+                st.download_button(
+                    "⬇️ Download MOS PRO (.pptx)",
+                    pro_buffer,
+                    file_name=f"EWMT_MOS_PRO_{safe_customer}.pptx",
+                    mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                    use_container_width=True,
+                )
+
+            except Exception as exc:
+                st.error("MOS PRO generation failed")
+                st.exception(exc)
+
 
 
 # ======================================================
@@ -2063,6 +2498,11 @@ if page == "⚙️ Settings":
         render_admin_document_manager()
 
     st.markdown("---")
+    with st.expander("📑 Method Statement PRO Master Template"):
+        st.code("Templates/MOS New.pptx")
+        st.write("MOS PRO uses the PowerPoint itself as the master. No placeholders are required in V1; the app finds and updates the repeated Customer / Site / Process / Prepared / Approved / Review fields while preserving the rest of the presentation.")
+        st.caption("Accepted alternate filenames: MOS New(1).pptx or Method Statement PRO.pptx")
+
     with st.expander("📄 Method Statement Placeholder Guide"):
         st.code("""
 Use these placeholders in your Method Statement Word template:
