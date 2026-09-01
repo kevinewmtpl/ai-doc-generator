@@ -5,7 +5,7 @@ import hmac
 import re
 from urllib.parse import quote
 from io import BytesIO
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import requests
 
@@ -439,6 +439,36 @@ def tick(value):
 
 def safe_text(value):
     return "" if value is None else str(value)
+
+
+def format_date_ddmmyyyy(value):
+    """Return dates consistently as DD/MM/YYYY across the EWMT app."""
+    if value is None or value == "":
+        return ""
+
+    if isinstance(value, (date, datetime)):
+        return value.strftime("%d/%m/%Y")
+
+    text = str(value).strip()
+    if not text:
+        return ""
+
+    # Accept common existing / legacy date formats, but always output DD/MM/YYYY.
+    for fmt in (
+        "%d/%m/%Y",
+        "%Y-%m-%d",
+        "%d-%m-%Y",
+        "%d.%m.%Y",
+        "%Y/%m/%d",
+        "%Y.%m.%d",
+    ):
+        try:
+            return datetime.strptime(text, fmt).strftime("%d/%m/%Y")
+        except ValueError:
+            pass
+
+    # If it is not a recognised date, preserve the user's text rather than failing.
+    return text
 
 
 def clean_ms_text(text):
@@ -1034,7 +1064,7 @@ def render_admin_document_manager():
 
         st.info(
             "Tip: for lifting gear expiry alerts, include the expiry date in the filename, "
-            "for example: 10 Ton Shackle Expiry 2027-08-31.pdf"
+            "for example: 10 Ton Shackle Expiry 31-08-2027.pdf"
         )
 
         if st.button(
@@ -1584,7 +1614,7 @@ if page == "📄 Method Statement":
     with st.expander("Project Details", expanded=True):
         ms_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ms_company")
         ms_project_name = st.text_input("Project Name", key="ms_project_name")
-        ms_date_input = st.date_input("Date", value=date.today(), key="ms_date_input")
+        ms_date_input = st.date_input("Date", value=date.today(), format="DD/MM/YYYY", key="ms_date_input")
         ms_description = st.text_area("Description of Work", key="ms_description")
         ms_machine = st.text_input("Machine Model, Dimension and Weight", key="ms_machine")
         ms_operation_time = st.text_input("Operation Date & Time", key="ms_operation_time")
@@ -1683,7 +1713,7 @@ job_scope
                 replace_all(doc, {
                     "{{company}}": safe_text(ms_company),
                     "{{project_name}}": safe_text(ms_project_name),
-                    "{{date}}": str(ms_date_input),
+                    "{{date}}": format_date_ddmmyyyy(ms_date_input),
                     "{{location}}": safe_text(ms_location),
                     "{{description_of_work}}": safe_text(ms_description),
                     "{{machine_spec}}": safe_text(ms_machine),
@@ -1691,7 +1721,7 @@ job_scope
                     "{{safety_aspect}}": safe_text(data["safety_aspect"]),
                     "{{job_scope}}": safe_text(data["job_scope"]),
                     "{{risk_assessment_note}}": "Refer as attached",
-                    "{{operation_date}}": str(ms_date_input),
+                    "{{operation_date}}": format_date_ddmmyyyy(ms_date_input),
                     "{{operation_time}}": safe_text(ms_operation_time),
                     "{{obstacles}}": safe_text(ms_obstacles),
                     "{{environment}}": safe_text(ms_environment),
@@ -1756,8 +1786,8 @@ if page == "📑 Method Statement PRO":
             pro_prepared = st.text_input("Prepared By", value="Kevin Wong", key="mospro_prepared")
         with c2:
             pro_approved = st.text_input("Approved By", value="Eric Wong (Director)", key="mospro_approved")
-            pro_last_review = st.date_input("Last Review Date", value=date.today(), key="mospro_last_review")
-            pro_next_review = st.date_input("Next Review Date", value=date.today() + timedelta(days=365), key="mospro_next_review")
+            pro_last_review = st.date_input("Last Review Date", value=date.today(), format="DD/MM/YYYY", key="mospro_last_review")
+            pro_next_review = st.date_input("Next Review Date", value=date.today() + timedelta(days=365), format="DD/MM/YYYY", key="mospro_next_review")
 
         st.caption(
             "These values replace the old customer/site/process/review information in the repeated header table on the master pages. "
@@ -1860,8 +1890,8 @@ This keeps the PRO version safe to develop slowly while the current Word Method 
                         "process": pro_process,
                         "prepared_by": pro_prepared,
                         "approved_by": pro_approved,
-                        "last_review": pro_last_review.strftime("%d.%m.%Y"),
-                        "next_review": pro_next_review.strftime("%d.%m.%Y"),
+                        "last_review": format_date_ddmmyyyy(pro_last_review),
+                        "next_review": format_date_ddmmyyyy(pro_next_review),
                     }
                     work_method_data = {
                         "operation_type": pro_operation_type,
@@ -1913,7 +1943,7 @@ if page == "🏗️ Lifting Plan":
         lp_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="lp_company")
         lp_project_name = st.text_input("Project", key="lp_project_name")
         lp_location = st.text_input("Location of Lifting Operation", key="lp_location")
-        lp_date_input = st.date_input("Date", value=date.today(), key="lp_date_input")
+        lp_date_input = st.date_input("Date", value=date.today(), format="DD/MM/YYYY", key="lp_date_input")
         lp_operation_time = st.text_input("Operation Time", key="lp_operation_time")
         lp_validity = st.text_input("Validity Period of Lifting Operation", "1 Day", key="lp_validity")
 
@@ -1935,8 +1965,8 @@ if page == "🏗️ Lifting Plan":
         lorry_loader = st.checkbox("Lorry Loader", value=True, key="lorry_loader")
 
         crane_name = st.text_input("LM / LE Registration No.", key="crane_name")
-        crane_renew = st.text_input("Date of Last Certification", key="crane_renew")
-        crane_expiry = st.text_input("Expiry Date of Certificate", key="crane_expiry")
+        crane_renew = st.text_input("Date of Last Certification (DD/MM/YYYY)", placeholder="DD/MM/YYYY", key="crane_renew")
+        crane_expiry = st.text_input("Expiry Date of Certificate (DD/MM/YYYY)", placeholder="DD/MM/YYYY", key="crane_expiry")
         crane_swl = st.text_input("Max Safe Working Load", key="crane_swl")
         boom_length = st.text_input("Max Boom / Jib Length", key="boom_length")
         crane_radius = st.text_input("Intended Load Radius", key="crane_radius")
@@ -1955,7 +1985,7 @@ if page == "🏗️ Lifting Plan":
         lg_cert_yes = st.checkbox("Certification of Lifting Gears - Yes", value=True, key="lg_cert_yes")
         lg_cert_no = st.checkbox("Certification of Lifting Gears - No", value=False, key="lg_cert_no")
 
-        lg_expiry = st.text_input("Expiry Date of Lifting Gear Certificate", key="lg_expiry")
+        lg_expiry = st.text_input("Expiry Date of Lifting Gear Certificate (DD/MM/YYYY)", placeholder="DD/MM/YYYY", key="lg_expiry")
 
     with st.expander("4. Means of Communication", expanded=True):
         operator_can_see_yes = st.checkbox("Operator Can See Loading / Unloading Position - Yes", value=True, key="operator_can_see_yes")
@@ -2077,8 +2107,8 @@ Return JSON only:
                     "{{company}}": safe_text(lp_company),
                     "{{project_name}}": safe_text(lp_project_name),
                     "{{location}}": safe_text(lp_location),
-                    "{{date}}": str(lp_date_input),
-                    "{{operation_date}}": str(lp_date_input),
+                    "{{date}}": format_date_ddmmyyyy(lp_date_input),
+                    "{{operation_date}}": format_date_ddmmyyyy(lp_date_input),
                     "{{operation_time}}": safe_text(lp_operation_time),
                     "{{validity_period}}": safe_text(lp_validity),
 
@@ -2101,8 +2131,8 @@ Return JSON only:
                     "{{Crane_lm}}": safe_text(crane_name),
                     "{{crane_lm}}": safe_text(crane_name),
                     "{{crane_name}}": safe_text(crane_name),
-                    "{{crane_renew}}": safe_text(crane_renew),
-                    "{{crane_expiry}}": safe_text(crane_expiry),
+                    "{{crane_renew}}": format_date_ddmmyyyy(crane_renew),
+                    "{{crane_expiry}}": format_date_ddmmyyyy(crane_expiry),
                     "{{crane_swl}}": safe_text(crane_swl),
                     "{{boom_length}}": safe_text(boom_length),
 
@@ -2119,7 +2149,7 @@ Return JSON only:
 
                     "{{c_lg_y}}": tick(lg_cert_yes),
                     "{{c_lg_n}}": tick(lg_cert_no),
-                    "{{lg_expiry}}": safe_text(lg_expiry),
+                    "{{lg_expiry}}": format_date_ddmmyyyy(lg_expiry),
 
                     "{{coms_y}}": tick(operator_can_see_yes),
                     "{{coms_n}}": tick(operator_can_see_no),
@@ -2224,8 +2254,8 @@ if page == "⚠️ Risk Assessment Pro":
         ra_location = st.text_input("Location", key="ra_location")
         ra_machine = st.text_input("Machine Spec", key="ra_machine")
         ra_description = st.text_area("Description of Work", key="ra_description")
-        ra_date_input = st.date_input("Date", value=date.today(), key="ra_date_input")
-        ra_due_date_input = st.date_input("Due Date", value=date.today(), key="ra_due_date_input")
+        ra_date_input = st.date_input("Date", value=date.today(), format="DD/MM/YYYY", key="ra_date_input")
+        ra_due_date_input = st.date_input("Due Date", value=date.today(), format="DD/MM/YYYY", key="ra_due_date_input")
 
     with st.expander("Risk Assessment Details", expanded=True):
         ra_process = st.text_input("RA Process", "Machinery Moving / Lifting Operation", key="ra_process")
@@ -2255,8 +2285,8 @@ Location: {ra_location}
 Process: {ra_process}
 Machine: {ra_machine}
 Description: {ra_description}
-Date: {ra_date_input}
-Due Date: {ra_due_date_input}
+Date: {format_date_ddmmyyyy(ra_date_input)}
+Due Date: {format_date_ddmmyyyy(ra_due_date_input)}
 
 Activities:
 {activities}
@@ -2288,7 +2318,7 @@ Schema:
     "rl":"1",
     "rrpn":"4",
     "person":"Supervisor on site",
-    "due_date":"{ra_due_date_input}",
+    "due_date":"{format_date_ddmmyyyy(ra_due_date_input)}",
     "remark":""
    }}
  ]
@@ -2312,8 +2342,8 @@ Schema:
                     "{{company}}": ra_company,
                     "{{location}}": ra_location,
                     "{{process}}": ra_process,
-                    "{{date}}": str(ra_date_input),
-                    "{{due_date}}": str(ra_due_date_input)
+                    "{{date}}": format_date_ddmmyyyy(ra_date_input),
+                    "{{due_date}}": format_date_ddmmyyyy(ra_due_date_input)
                 })
 
                 fill_inventory_table(doc, activities, ra_location, ra_process)
@@ -2338,7 +2368,7 @@ Schema:
                             r["rl"],
                             r["rrpn"],
                             r["person"],
-                            str(ra_due_date_input),
+                            format_date_ddmmyyyy(ra_due_date_input),
                             r["remark"]
                         ])
 
@@ -2458,7 +2488,7 @@ if page == "⏰ Expiry Alerts":
 
                     records.append({
                         "Certificate File": f,
-                        "Expiry Date": str(found_date),
+                        "Expiry Date": format_date_ddmmyyyy(found_date),
                         "Days Left": days_left,
                         "Status": status
                     })
@@ -2482,7 +2512,7 @@ if page == "⏰ Expiry Alerts":
             st.markdown("### Certificate Expiry List")
             st.dataframe(records, use_container_width=True)
 
-            st.info("For this to work, put expiry date inside the certificate filename, example: 3 Ton Shackle Expiry 2026-06-30.pdf")
+            st.info("For this to work, put expiry date inside the certificate filename, example: 3 Ton Shackle Expiry 30-06-2026.pdf")
 
 
 # ======================================================
