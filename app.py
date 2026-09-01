@@ -2,17 +2,28 @@ import os
 import json
 import base64
 import hmac
+import math
+import re
+import textwrap
 from urllib.parse import quote
 from io import BytesIO
-from datetime import date
+from datetime import date, timedelta
 
 import requests
 
 import streamlit as st
 from openai import OpenAI
 from docx import Document
-from docx.shared import Pt
+from docx.shared import Pt, Inches, RGBColor
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT, WD_CELL_VERTICAL_ALIGNMENT
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+except Exception:
+    Image = ImageDraw = ImageFont = None
 
 # =====================
 # PAGE CONFIG
@@ -1047,6 +1058,867 @@ def render_admin_document_manager():
                     st.error("Upload failed.")
                     st.exception(e)
 
+
+# ======================================================
+# PROFESSIONAL METHOD STATEMENT HELPERS
+# ======================================================
+MOS_BLUE = "0B5A7A"
+MOS_DARK = "17324D"
+MOS_LIGHT = "EAF2F7"
+MOS_GREY = "EEF1F4"
+MOS_RED = "C0392B"
+MOS_GREEN = "2E7D32"
+
+
+def mos_set_cell_shading(cell, fill):
+    tc_pr = cell._tc.get_or_add_tcPr()
+    shd = tc_pr.find(qn("w:shd"))
+    if shd is None:
+        shd = OxmlElement("w:shd")
+        tc_pr.append(shd)
+    shd.set(qn("w:fill"), fill)
+
+
+def mos_set_cell_margins(cell, top=80, start=100, bottom=80, end=100):
+    tc = cell._tc
+    tc_pr = tc.get_or_add_tcPr()
+    tc_mar = tc_pr.first_child_found_in("w:tcMar")
+    if tc_mar is None:
+        tc_mar = OxmlElement("w:tcMar")
+        tc_pr.append(tc_mar)
+    for m, v in (("top", top), ("start", start), ("bottom", bottom), ("end", end)):
+        node = tc_mar.find(qn(f"w:{m}"))
+        if node is None:
+            node = OxmlElement(f"w:{m}")
+            tc_mar.append(node)
+        node.set(qn("w:w"), str(v))
+        node.set(qn("w:type"), "dxa")
+
+
+def mos_set_repeat_table_header(row):
+    tr_pr = row._tr.get_or_add_trPr()
+    tbl_header = OxmlElement("w:tblHeader")
+    tbl_header.set(qn("w:val"), "true")
+    tr_pr.append(tbl_header)
+
+
+def mos_set_font(run, size=9, bold=False, color=None, name="Arial"):
+    run.font.name = name
+    run._element.rPr.rFonts.set(qn("w:eastAsia"), name)
+    run.font.size = Pt(size)
+    run.bold = bold
+    if color:
+        run.font.color.rgb = RGBColor.from_string(color)
+
+
+def mos_style_paragraph(paragraph, size=9, bold=False, color=None, align=None, space_after=4):
+    if align is not None:
+        paragraph.alignment = align
+    paragraph.paragraph_format.space_after = Pt(space_after)
+    paragraph.paragraph_format.line_spacing = 1.08
+    for run in paragraph.runs:
+        mos_set_font(run, size=size, bold=bold, color=color)
+
+
+def mos_add_page_field(paragraph):
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run = paragraph.add_run("Page ")
+    mos_set_font(run, 8, color="64748B")
+    fld_char1 = OxmlElement("w:fldChar")
+    fld_char1.set(qn("w:fldCharType"), "begin")
+    instr_text = OxmlElement("w:instrText")
+    instr_text.set(qn("xml:space"), "preserve")
+    instr_text.text = " PAGE "
+    fld_char2 = OxmlElement("w:fldChar")
+    fld_char2.set(qn("w:fldCharType"), "end")
+    run._r.append(fld_char1)
+    run._r.append(instr_text)
+    run._r.append(fld_char2)
+
+    run2 = paragraph.add_run(" of ")
+    mos_set_font(run2, 8, color="64748B")
+    fld_char3 = OxmlElement("w:fldChar")
+    fld_char3.set(qn("w:fldCharType"), "begin")
+    instr_text2 = OxmlElement("w:instrText")
+    instr_text2.set(qn("xml:space"), "preserve")
+    instr_text2.text = " NUMPAGES "
+    fld_char4 = OxmlElement("w:fldChar")
+    fld_char4.set(qn("w:fldCharType"), "end")
+    run2._r.append(fld_char3)
+    run2._r.append(instr_text2)
+    run2._r.append(fld_char4)
+
+
+def mos_setup_document(doc, project):
+    styles = doc.styles
+    styles["Normal"].font.name = "Arial"
+    styles["Normal"]._element.rPr.rFonts.set(qn("w:eastAsia"), "Arial")
+    styles["Normal"].font.size = Pt(9)
+
+    for section in doc.sections:
+        section.top_margin = Inches(0.88)
+        section.bottom_margin = Inches(0.65)
+        section.left_margin = Inches(0.62)
+        section.right_margin = Inches(0.62)
+        section.header_distance = Inches(0.18)
+        section.footer_distance = Inches(0.25)
+
+        header = section.header
+        header.is_linked_to_previous = False
+        if header.paragraphs:
+            p0 = header.paragraphs[0]
+            p0.text = ""
+        table = header.add_table(rows=1, cols=2, width=Inches(7.0))
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        table.columns[0].width = Inches(4.8)
+        table.columns[1].width = Inches(2.2)
+        left, right = table.rows[0].cells
+        mos_set_cell_shading(left, "FFFFFF")
+        mos_set_cell_shading(right, "FFFFFF")
+
+        logo_candidates = [
+            os.path.join(ASSET_DIR, "logo.png"),
+            os.path.join(ASSET_DIR, "logo.jpg"),
+            os.path.join(ASSET_DIR, "ewmt_logo.png"),
+        ]
+        logo = next((p for p in logo_candidates if os.path.exists(p)), None)
+        if logo:
+            lp = left.paragraphs[0]
+            lp.alignment = WD_ALIGN_PARAGRAPH.LEFT
+            lp.add_run().add_picture(logo, width=Inches(0.55))
+            p = left.add_paragraph()
+        else:
+            p = left.paragraphs[0]
+
+        r = p.add_run("ERIC WONG MACHINERY TRANSPORTATION PTE LTD")
+        mos_set_font(r, 10, True, MOS_DARK)
+        p2 = left.add_paragraph("28 Kranji Loop #05-03, Kranji Green, Singapore 739571\nTel: 62824175, 62828203, 62826020  •  www.ericwong.com")
+        mos_style_paragraph(p2, size=7, color="475569", space_after=0)
+
+        rp = right.paragraphs[0]
+        rp.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        rr = rp.add_run("METHOD STATEMENT\n")
+        mos_set_font(rr, 9, True, MOS_BLUE)
+        rr2 = rp.add_run("LIFTING & MACHINERY MOVING")
+        mos_set_font(rr2, 7, True, MOS_DARK)
+
+        meta = header.add_table(rows=2, cols=4, width=Inches(7.0))
+        meta.alignment = WD_TABLE_ALIGNMENT.CENTER
+        labels = [
+            ("Customer", project.get("customer", "")),
+            ("Site", project.get("location", "")),
+            ("Prepared", project.get("prepared_by", "")),
+            ("Approved", project.get("approved_by", "")),
+        ]
+        for i, (lab, val) in enumerate(labels):
+            row = 0 if i < 2 else 1
+            col = (i % 2) * 2
+            c1, c2 = meta.rows[row].cells[col], meta.rows[row].cells[col + 1]
+            mos_set_cell_shading(c1, MOS_BLUE)
+            mos_set_cell_shading(c2, MOS_LIGHT)
+            c1.text = lab
+            c2.text = str(val)
+            for c in (c1, c2):
+                mos_set_cell_margins(c, top=45, bottom=45, start=70, end=70)
+                c.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+            for run in c1.paragraphs[0].runs:
+                mos_set_font(run, 6.5, True, "FFFFFF")
+            for run in c2.paragraphs[0].runs:
+                mos_set_font(run, 6.5, False, MOS_DARK)
+
+        footer = section.footer
+        fp = footer.paragraphs[0]
+        fp.text = "EWMT Internal Controlled Document  •  "
+        mos_style_paragraph(fp, size=7, color="64748B", align=WD_ALIGN_PARAGRAPH.CENTER, space_after=0)
+        mos_add_page_field(fp)
+
+
+def mos_add_title(doc, text, level=1):
+    p = doc.add_paragraph()
+    p.paragraph_format.keep_with_next = True
+    if level == 1:
+        r = p.add_run(text)
+        mos_set_font(r, 15, True, MOS_BLUE)
+        p.paragraph_format.space_before = Pt(8)
+        p.paragraph_format.space_after = Pt(7)
+    else:
+        r = p.add_run(text)
+        mos_set_font(r, 11, True, MOS_DARK)
+        p.paragraph_format.space_before = Pt(6)
+        p.paragraph_format.space_after = Pt(4)
+    return p
+
+
+def mos_add_body(doc, text, bullet=False, bold_prefix=None):
+    if not str(text).strip():
+        return
+    p = doc.add_paragraph(style=None)
+    if bullet:
+        p.style = doc.styles["List Bullet"]
+    r = p.add_run(str(text).strip())
+    mos_set_font(r, 9, False, "1F2937")
+    p.paragraph_format.space_after = Pt(3)
+    p.paragraph_format.line_spacing = 1.08
+    return p
+
+
+def mos_add_bullets(doc, items):
+    for item in items or []:
+        if str(item).strip():
+            mos_add_body(doc, str(item).strip(), bullet=True)
+
+
+def mos_add_key_value_table(doc, rows, widths=(2.2, 4.8)):
+    table = doc.add_table(rows=0, cols=2)
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    table.style = "Table Grid"
+    for label, value in rows:
+        cells = table.add_row().cells
+        cells[0].width = Inches(widths[0])
+        cells[1].width = Inches(widths[1])
+        mos_set_cell_shading(cells[0], MOS_LIGHT)
+        cells[0].text = str(label)
+        cells[1].text = str(value if value not in (None, "") else "-")
+        for run in cells[0].paragraphs[0].runs:
+            mos_set_font(run, 8, True, MOS_DARK)
+        for run in cells[1].paragraphs[0].runs:
+            mos_set_font(run, 8, False, "1F2937")
+        for c in cells:
+            mos_set_cell_margins(c)
+            c.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
+    doc.add_paragraph().paragraph_format.space_after = Pt(0)
+    return table
+
+
+def mos_add_three_col_table(doc, headers, rows):
+    table = doc.add_table(rows=1, cols=len(headers))
+    table.style = "Table Grid"
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    for i, h in enumerate(headers):
+        cell = table.rows[0].cells[i]
+        cell.text = h
+        mos_set_cell_shading(cell, MOS_BLUE)
+        for run in cell.paragraphs[0].runs:
+            mos_set_font(run, 8, True, "FFFFFF")
+    mos_set_repeat_table_header(table.rows[0])
+    for row in rows:
+        cells = table.add_row().cells
+        for i, value in enumerate(row):
+            cells[i].text = str(value)
+            for run in cells[i].paragraphs[0].runs:
+                mos_set_font(run, 8, False, "1F2937")
+            mos_set_cell_margins(cells[i])
+    return table
+
+
+def mos_get_font(size=28, bold=False):
+    if ImageFont is None:
+        return None
+    candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+    ]
+    for candidate in candidates:
+        try:
+            if os.path.exists(candidate):
+                return ImageFont.truetype(candidate, size=size)
+        except Exception:
+            pass
+    return ImageFont.load_default()
+
+
+def mos_arrow(draw, start, end, fill="#0B5A7A", width=8, head=24):
+    draw.line([start, end], fill=fill, width=width)
+    x1, y1 = start
+    x2, y2 = end
+    angle = math.atan2(y2 - y1, x2 - x1)
+    left = (x2 - head * math.cos(angle - math.pi / 6), y2 - head * math.sin(angle - math.pi / 6))
+    right = (x2 - head * math.cos(angle + math.pi / 6), y2 - head * math.sin(angle + math.pi / 6))
+    draw.polygon([end, left, right], fill=fill)
+
+
+def mos_canvas(title):
+    if Image is None:
+        return None, None
+    img = Image.new("RGB", (1600, 900), "white")
+    draw = ImageDraw.Draw(img)
+    title_font = mos_get_font(42, True)
+    draw.text((60, 40), title, fill="#17324D", font=title_font)
+    draw.line((60, 105, 1540, 105), fill="#0B5A7A", width=5)
+    return img, draw
+
+
+def mos_make_top_view(data):
+    img, draw = mos_canvas("Top View – Crane / Building / Landing Arrangement")
+    if img is None:
+        return None
+    f = mos_get_font(28, False)
+    fb = mos_get_font(28, True)
+    # building
+    draw.rounded_rectangle((980, 210, 1510, 720), radius=16, fill="#D7E7F0", outline="#17324D", width=5)
+    draw.text((1120, 430), "BUILDING", fill="#17324D", font=fb)
+    # door opening
+    draw.rectangle((970, 390, 1000, 545), fill="white", outline="#C0392B", width=4)
+    draw.text((1010, 360), f"Door {data.get('door_width', 0):.1f} m W", fill="#C0392B", font=f)
+    # crane body
+    draw.rounded_rectangle((370, 330, 650, 600), radius=18, fill="#F4B942", outline="#7A4B00", width=5)
+    draw.text((430, 450), "CRANE", fill="#4A2B00", font=fb)
+    # outriggers
+    for y in (365, 565):
+        draw.line((250, y, 770, y), fill="#444444", width=12)
+        draw.ellipse((220, y-22, 265, y+22), fill="#B0B7BE", outline="#333333")
+        draw.ellipse((755, y-22, 800, y+22), fill="#B0B7BE", outline="#333333")
+    # boom and load
+    draw.line((590, 420, 1120, 465), fill="#C0392B", width=18)
+    draw.ellipse((1100, 445, 1140, 485), fill="#111111")
+    draw.rounded_rectangle((1160, 420, 1365, 520), radius=10, fill="#E8EEF2", outline="#111111", width=4)
+    draw.text((1200, 450), "LOAD", fill="#111111", font=fb)
+    mos_arrow(draw, (1140, 465), (1190, 465), fill="#C0392B", width=7)
+    draw.text((900, 660), f"Crane to building ≈ {data.get('crane_distance', 0):.1f} m", fill="#17324D", font=f)
+    draw.text((1040, 750), f"Landing depth ≈ {data.get('landing_depth', 0):.1f} m", fill="#17324D", font=f)
+    draw.text((70, 805), "Schematic – verify all dimensions against actual site survey before work.", fill="#64748B", font=mos_get_font(22))
+    out = BytesIO()
+    img.save(out, format="PNG")
+    out.seek(0)
+    return out
+
+
+def mos_make_side_view(data):
+    img, draw = mos_canvas("Side Elevation – Lifting Geometry")
+    if img is None:
+        return None
+    f = mos_get_font(28, False)
+    fb = mos_get_font(28, True)
+    ground_y = 745
+    draw.line((70, ground_y, 1530, ground_y), fill="#555555", width=5)
+    # building
+    draw.rectangle((1110, 180, 1500, ground_y), fill="#D7E7F0", outline="#17324D", width=5)
+    draw.text((1225, 420), "BUILDING", fill="#17324D", font=fb)
+    # landing opening
+    landing_y = max(245, min(630, ground_y - int((data.get('building_height', 18.0) / max(data.get('building_height', 18.0), 1)) * 430)))
+    draw.rectangle((1100, landing_y-65, 1130, landing_y+65), fill="white", outline="#C0392B", width=4)
+    draw.rounded_rectangle((260, 590, 550, ground_y), radius=12, fill="#F4B942", outline="#7A4B00", width=5)
+    draw.text((330, 645), "CRANE", fill="#4A2B00", font=fb)
+    # boom
+    pivot = (490, 610)
+    elbow = (780, 265)
+    tip = (1130, landing_y)
+    draw.line([pivot, elbow, tip], fill="#C0392B", width=20, joint="curve")
+    # load
+    draw.rectangle((1135, landing_y-40, 1340, landing_y+40), fill="#E8EEF2", outline="#111111", width=4)
+    draw.text((1190, landing_y-18), "LOAD", fill="#111111", font=f)
+    # dimensions
+    mos_arrow(draw, (1520, ground_y), (1520, 185), fill="#0B5A7A", width=5, head=18)
+    draw.text((1330, 130), f"Building height {data.get('building_height',0):.1f} m", fill="#0B5A7A", font=f)
+    mos_arrow(draw, (550, 800), (1110, 800), fill="#0B5A7A", width=5, head=18)
+    draw.text((650, 815), f"Crane to building {data.get('crane_distance',0):.1f} m", fill="#0B5A7A", font=f)
+    draw.text((80, 805), f"Boom length entered: {data.get('boom_length',0):.1f} m  •  Operating radius: {data.get('operating_radius',0):.1f} m", fill="#64748B", font=mos_get_font(22))
+    out = BytesIO()
+    img.save(out, format="PNG")
+    out.seek(0)
+    return out
+
+
+def mos_make_route_view(data):
+    img, draw = mos_canvas("Machinery Movement Route – Schematic")
+    if img is None:
+        return None
+    f = mos_get_font(27, False)
+    fb = mos_get_font(27, True)
+    points = [(180, 600), (510, 600), (770, 430), (1050, 430), (1350, 260)]
+    labels = [
+        data.get("route_start", "Unloading Point") or "Unloading Point",
+        "Door / Entrance",
+        "Intermediate Point",
+        "Turning / Transfer",
+        data.get("route_final", "Final Position") or "Final Position",
+    ]
+    for i, pt in enumerate(points):
+        x, y = pt
+        draw.rounded_rectangle((x-105, y-45, x+105, y+45), radius=16, fill="#EAF2F7", outline="#17324D", width=4)
+        wrapped = textwrap.fill(labels[i], width=18)
+        draw.multiline_text((x-90, y-25), wrapped, fill="#17324D", font=f, align="center", spacing=4)
+        if i < len(points)-1:
+            mos_arrow(draw, (x+110, y), (points[i+1][0]-110, points[i+1][1]), fill="#0B5A7A", width=8)
+    if data.get("route_notes"):
+        draw.rounded_rectangle((140, 705, 1450, 830), radius=15, fill="#F8FAFC", outline="#94A3B8", width=3)
+        draw.multiline_text((175, 730), textwrap.fill(data.get("route_notes"), 105), fill="#334155", font=mos_get_font(23), spacing=5)
+    out = BytesIO()
+    img.save(out, format="PNG")
+    out.seek(0)
+    return out
+
+
+def mos_make_rigging_view(data):
+    img, draw = mos_canvas("Rigging Arrangement – Schematic")
+    if img is None:
+        return None
+    f = mos_get_font(28, False)
+    fb = mos_get_font(28, True)
+    hook = (800, 220)
+    draw.ellipse((770, 175, 830, 235), outline="#111111", width=6)
+    draw.line((800, 235, 800, 280), fill="#111111", width=8)
+    load_box = (410, 570, 1190, 735)
+    draw.rounded_rectangle(load_box, radius=12, fill="#E8EEF2", outline="#17324D", width=5)
+    draw.text((700, 635), data.get("machine_name", "MACHINE / LOAD")[:24], fill="#17324D", font=fb)
+    left_point = (525, 570)
+    right_point = (1075, 570)
+    draw.line((800, 280, left_point[0], left_point[1]), fill="#C0392B", width=12)
+    draw.line((800, 280, right_point[0], right_point[1]), fill="#C0392B", width=12)
+    draw.ellipse((left_point[0]-12, left_point[1]-12, left_point[0]+12, left_point[1]+12), fill="#111111")
+    draw.ellipse((right_point[0]-12, right_point[1]-12, right_point[0]+12, right_point[1]+12), fill="#111111")
+    # CG
+    draw.line((800, 520, 800, 745), fill="#0B5A7A", width=4)
+    draw.ellipse((780, 635, 820, 675), outline="#0B5A7A", width=5)
+    draw.text((835, 635), "CG", fill="#0B5A7A", font=fb)
+    draw.text((500, 330), f"Sling angle: {data.get('sling_angle',60):.0f}° (entered)", fill="#17324D", font=f)
+    draw.text((500, 385), f"Lifting points: {data.get('lifting_points','Verify approved lifting points')}", fill="#17324D", font=f)
+    draw.text((500, 440), f"Lifting gear: {str(data.get('lifting_gear',''))[:65]}", fill="#17324D", font=f)
+    draw.text((70, 805), "Schematic only – lifting supervisor to verify actual rigging arrangement, sling angle, SWL and centre of gravity before lifting.", fill="#64748B", font=mos_get_font(22))
+    out = BytesIO()
+    img.save(out, format="PNG")
+    out.seek(0)
+    return out
+
+
+def mos_add_picture_bytes(doc, image_bytes, caption=None, width=6.7):
+    if not image_bytes:
+        return
+    try:
+        image_bytes.seek(0)
+    except Exception:
+        pass
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = p.add_run()
+    r.add_picture(image_bytes, width=Inches(width))
+    if caption:
+        cp = doc.add_paragraph(caption)
+        cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        mos_style_paragraph(cp, size=8, color="64748B", space_after=7)
+
+
+def mos_uploaded_image_bytes(uploaded_file):
+    raw = uploaded_file.getvalue()
+    if Image is None:
+        return BytesIO(raw)
+    try:
+        im = Image.open(BytesIO(raw))
+        if im.mode not in ("RGB", "L"):
+            im = im.convert("RGB")
+        out = BytesIO()
+        im.save(out, format="JPEG", quality=88)
+        out.seek(0)
+        return out
+    except Exception:
+        return BytesIO(raw)
+
+
+def mos_download_github_item(item):
+    if not item:
+        return None
+    url = item.get("download_url")
+    if not url:
+        meta = github_get_file(item.get("path", ""))
+        if meta and meta.get("content"):
+            return base64.b64decode(meta["content"])
+        url = (meta or {}).get("download_url")
+    if not url:
+        return None
+    r = requests.get(url, headers=github_headers(), timeout=60)
+    r.raise_for_status()
+    return r.content
+
+
+def mos_append_attachment(doc, title, filename, raw_bytes, full_pdf=True):
+    doc.add_page_break()
+    mos_add_title(doc, title, 1)
+    mos_add_body(doc, f"Attachment: {filename}")
+    ext = os.path.splitext(filename.lower())[1]
+
+    if ext in (".png", ".jpg", ".jpeg"):
+        try:
+            mos_add_picture_bytes(doc, BytesIO(raw_bytes), caption=filename, width=6.5)
+            return True
+        except Exception as exc:
+            mos_add_body(doc, f"Preview could not be inserted: {exc}")
+            return False
+
+    if ext == ".pdf":
+        try:
+            import fitz  # PyMuPDF - optional dependency
+            pdf = fitz.open(stream=raw_bytes, filetype="pdf")
+            max_pages = len(pdf) if full_pdf else min(1, len(pdf))
+            for page_index in range(max_pages):
+                page = pdf.load_page(page_index)
+                pix = page.get_pixmap(matrix=fitz.Matrix(1.55, 1.55), alpha=False)
+                png = BytesIO(pix.tobytes("png"))
+                mos_add_picture_bytes(doc, png, caption=f"{filename} — page {page_index + 1} of {len(pdf)}", width=6.45)
+                if page_index < max_pages - 1:
+                    doc.add_page_break()
+            pdf.close()
+            return True
+        except ImportError:
+            mos_add_body(doc, "PDF preview embedding requires PyMuPDF in requirements.txt. The file name is included, but the PDF pages were not embedded.")
+            return False
+        except Exception as exc:
+            mos_add_body(doc, f"PDF preview could not be inserted: {exc}")
+            return False
+
+    mos_add_body(doc, "This attachment type is listed but not embedded. Convert it to PDF/PNG/JPG if you want the full pages inside the MOS.")
+    return False
+
+
+def mos_generate_ai_content(data):
+    selected_equipment = ", ".join(data.get("equipment", []))
+    prompt = f"""
+Prepare PROJECT-SPECIFIC professional Method Statement content for Eric Wong Machinery Transportation Pte Ltd.
+Use Singapore machinery moving / lifting contractor wording.
+
+PROJECT
+Customer: {data.get('customer')}
+Project: {data.get('project_name')}
+Location: {data.get('location')}
+Description: {data.get('description')}
+Process: {data.get('process')}
+Operation date/time: {data.get('operation_date')} {data.get('operation_time')}
+
+LOAD
+Machine / load: {data.get('machine_name')}
+Load type: {data.get('load_type')}
+Weight: {data.get('load_weight_kg')} kg
+Rigging weight: {data.get('rigging_weight_kg')} kg
+Dimensions L/W/H: {data.get('length_m')} / {data.get('width_m')} / {data.get('height_m')} m
+Centre of gravity: {data.get('cg')}
+Lifting points: {data.get('lifting_points')}
+Lift classification: {data.get('lift_classification')}
+
+SELECTED EQUIPMENT - ONLY USE THESE UNLESS A SAFETY ITEM IS NECESSARY
+{selected_equipment}
+Crane: {data.get('crane_model')}
+Operating radius: {data.get('operating_radius')} m
+SWL at operating radius: {data.get('swl_at_radius_kg')} kg
+Boom length: {data.get('boom_length')} m
+Lifting gear: {data.get('lifting_gear')}
+Forklift: {data.get('forklift_details')}
+
+SITE
+Ground: {data.get('ground_condition')}
+Access route: {data.get('access_route')}
+Obstacles: {data.get('obstacles')}
+Environment: {data.get('environment')}
+Door clearance: {data.get('door_width')} m W x {data.get('door_height')} m H
+Building / lift height: {data.get('building_height')} m
+Crane-to-building distance: {data.get('crane_distance')} m
+Landing depth: {data.get('landing_depth')} m
+Movement start: {data.get('route_start')}
+Final position: {data.get('route_final')}
+Route notes: {data.get('route_notes')}
+
+PERSONNEL
+{data.get('lifting_crew')}
+
+Rules:
+- Be site specific. Do not produce a generic equipment shopping list.
+- Do not state "where required" repeatedly. Mention equipment that was actually selected.
+- Work sequence should normally have 12 to 25 precise steps.
+- Include trial lift where a crane/lorry loader lift is selected.
+- Include floor protection / steel plates / plywood only if selected or stated in the site information.
+- State hold points that the lifting supervisor must verify before proceeding.
+- Include STOP WORK triggers for unsafe conditions.
+- Do not claim engineering calculations have been performed unless the provided numbers show them.
+- Do not invent certificates, registration numbers, load chart capacity, dimensions, personnel names or client requirements.
+- Return JSON only.
+"""
+    response = client.responses.create(
+        model="gpt-5.4",
+        input=prompt,
+        tools=[{
+            "type": "file_search",
+            "vector_store_ids": [MS_VECTOR_STORE_ID]
+        }],
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "professional_mos_schema",
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "executive_summary": {"type": "string"},
+                        "equipment_notes": {"type": "array", "items": {"type": "string"}},
+                        "site_controls": {"type": "array", "items": {"type": "string"}},
+                        "safety_controls": {"type": "array", "items": {"type": "string"}},
+                        "work_sequence": {"type": "array", "items": {"type": "string"}},
+                        "hold_points": {"type": "array", "items": {"type": "string"}},
+                        "emergency_response": {"type": "array", "items": {"type": "string"}},
+                        "assumptions": {"type": "array", "items": {"type": "string"}}
+                    },
+                    "required": [
+                        "executive_summary", "equipment_notes", "site_controls", "safety_controls",
+                        "work_sequence", "hold_points", "emergency_response", "assumptions"
+                    ]
+                }
+            }
+        }
+    )
+    return json.loads(response.output_text)
+
+
+def mos_build_professional_doc(data, ai, site_photos, photo_captions, site_plan_file, cert_items, extra_attachments, full_pdf=True):
+    doc = Document()
+    project_meta = {
+        "customer": data.get("customer", ""),
+        "location": data.get("location", ""),
+        "prepared_by": data.get("prepared_by", ""),
+        "approved_by": data.get("approved_by", ""),
+    }
+    mos_setup_document(doc, project_meta)
+
+    # COVER
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(70)
+    r = p.add_run("METHOD STATEMENT,\nLIFTING PLAN SUPPORT &\nSAFE WORK PROCEDURE")
+    mos_set_font(r, 24, True, MOS_DARK)
+    p2 = doc.add_paragraph("For Lifting and Machinery Moving Operation")
+    p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    mos_style_paragraph(p2, size=14, bold=True, color=MOS_BLUE, space_after=30)
+
+    mos_add_key_value_table(doc, [
+        ("Customer / Tenant Company", data.get("customer")),
+        ("Project", data.get("project_name")),
+        ("Site Location", data.get("location")),
+        ("Process", data.get("process")),
+        ("Operation Date / Time", f"{data.get('operation_date')}  {data.get('operation_time')}"),
+        ("Prepared By", data.get("prepared_by")),
+        ("Approved By", data.get("approved_by")),
+        ("Last / Next Review", f"{data.get('last_review')} / {data.get('next_review')}"),
+        ("Lift Classification", data.get("lift_classification")),
+    ])
+    doc.add_paragraph()
+    cp = doc.add_paragraph("CONTROLLED DOCUMENT – Site conditions and lifting parameters shall be verified before commencement of work.")
+    cp.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    mos_style_paragraph(cp, size=9, bold=True, color=MOS_RED, space_after=0)
+    doc.add_page_break()
+
+    # CONTENTS
+    mos_add_title(doc, "Contents", 1)
+    contents = [
+        "1.0 Workplace Safety & Health / Objectives",
+        "2.0 Scope and Responsibilities",
+        "3.0 Site Survey and Risk Assessment",
+        "4.0 Lift Classification and Planning Controls",
+        "5.0 Project / Load / Equipment Information",
+        "6.0 Site Conditions and Controls",
+        "7.0 Detailed Work Method and Hold Points",
+        "8.0 Emergency / Stop Work Procedure",
+        "9.0 Engineering & Site Drawings",
+        "10.0 Site Photographs",
+        "11.0 Certificates / Supporting Attachments",
+        "12.0 Approval / Pre-Start Verification",
+    ]
+    for item in contents:
+        mos_add_body(doc, item)
+    doc.add_page_break()
+
+    # STANDARD SECTIONS
+    mos_add_title(doc, "1.0 Workplace Safety & Health / Objectives", 1)
+    mos_add_body(doc, "The lifting and machinery moving operation shall be planned, supervised and carried out so far as reasonably practicable without risk to personnel, property or surrounding operations. Applicable workplace safety requirements, approved risk controls, lifting plans and permit-to-work requirements shall be implemented before work commences.")
+    mos_add_bullets(doc, [
+        "Prevent injury, dropped loads, uncontrolled machinery movement and property damage.",
+        "Use trained and competent personnel for lifting supervision, rigging, signalling and equipment operation.",
+        "Ensure lifting appliances, lifting gears and moving equipment are suitable, inspected and within valid certification where certification is required.",
+        "Stop work when site conditions differ materially from the approved plan or become unsafe.",
+    ])
+
+    mos_add_title(doc, "2.0 Scope and Responsibilities", 1)
+    mos_add_body(doc, "This Method Statement covers mobilisation, preparation, lifting/unloading, machinery shifting, positioning, housekeeping and demobilisation for the project described in this document.")
+    mos_add_three_col_table(doc, ["Role", "Primary Responsibility", "Project Requirement"], [
+        ("Project Manager / Coordinator", "Overall planning, client coordination and implementation of the approved work method.", "Confirm scope, access, resources and interfaces."),
+        ("Lifting Supervisor", "Control the lifting operation and verify conditions, equipment, rigging and personnel before lifting.", "Authority to stop work."),
+        ("Operator", "Operate the assigned crane / lorry loader / forklift within approved limits.", "Conduct pre-use checks."),
+        ("Rigger / Signalman", "Rig the load, control the load and give clear agreed signals.", "Maintain exclusion zone and tag-line control."),
+        ("Workers", "Follow briefing, RA, SWP and supervisor instructions.", "Use PPE and remain clear of suspended / moving loads."),
+    ])
+
+    mos_add_title(doc, "3.0 Site Survey and Risk Assessment", 1)
+    mos_add_body(doc, "A competent person shall verify the load, access route, ground/floor conditions, headroom, door clearance, crane or vehicle set-up area, landing point and final machinery position. Hazards identified during the survey shall be reflected in the Risk Assessment and actual site controls.")
+    mos_add_bullets(doc, [
+        "Verify load weight, dimensions, centre of gravity and suitable lifting / support points.",
+        "Confirm travel route capacity, turning space, slopes, floor protection and door / overhead clearances.",
+        "Confirm crane set-up location, outrigger support, operating radius and load-chart capacity where lifting equipment is used.",
+        "Review adjacent operations, public access, overhead obstructions, services and environmental conditions.",
+    ])
+
+    mos_add_title(doc, "4.0 Lift Classification and Planning Controls", 1)
+    mos_add_key_value_table(doc, [
+        ("Classification", data.get("lift_classification")),
+        ("Classification Reason / Notes", data.get("lift_reason")),
+        ("Crane / Lorry Loader Model", data.get("crane_model")),
+        ("Operating Radius", f"{data.get('operating_radius',0):.2f} m"),
+        ("SWL at Radius", f"{data.get('swl_at_radius_kg',0):,.0f} kg"),
+        ("Total Lifted Weight", f"{data.get('total_lifted_kg',0):,.0f} kg"),
+        ("Calculated Utilisation", f"{data.get('utilisation_pct',0):.1f}%" if data.get('swl_at_radius_kg',0) else "Not calculated"),
+    ])
+    if data.get("swl_at_radius_kg", 0) > 0:
+        if data.get("utilisation_pct", 0) > 100:
+            wp = doc.add_paragraph("STOP: Entered lifted weight exceeds entered SWL at operating radius. The lift shall not proceed on these values.")
+            mos_style_paragraph(wp, size=10, bold=True, color=MOS_RED)
+        elif data.get("utilisation_pct", 0) > 75:
+            wp = doc.add_paragraph("ATTENTION: Entered utilisation is above 75%. Treat as elevated planning attention / non-routine where applicable to the project requirements.")
+            mos_style_paragraph(wp, size=9, bold=True, color=MOS_RED)
+
+    # PROJECT SPECIFIC
+    doc.add_page_break()
+    mos_add_title(doc, "5.0 Project / Load / Equipment Information", 1)
+    mos_add_body(doc, ai.get("executive_summary", ""))
+    mos_add_key_value_table(doc, [
+        ("Description of Work", data.get("description")),
+        ("Machine / Load", data.get("machine_name")),
+        ("Load Type", data.get("load_type")),
+        ("Load Weight", f"{data.get('load_weight_kg',0):,.0f} kg"),
+        ("Rigging / Accessories Weight", f"{data.get('rigging_weight_kg',0):,.0f} kg"),
+        ("Total Lifted Weight", f"{data.get('total_lifted_kg',0):,.0f} kg"),
+        ("Dimensions (L × W × H)", f"{data.get('length_m',0):.2f} × {data.get('width_m',0):.2f} × {data.get('height_m',0):.2f} m"),
+        ("Centre of Gravity", data.get("cg")),
+        ("Lifting Points", data.get("lifting_points")),
+    ])
+    mos_add_title(doc, "Selected Equipment / Moving Tools", 2)
+    mos_add_bullets(doc, data.get("equipment", []))
+    mos_add_title(doc, "Lifting / Moving Equipment Details", 2)
+    mos_add_key_value_table(doc, [
+        ("Crane / Lorry Loader", data.get("crane_model")),
+        ("LM / LE No.", data.get("crane_lm")),
+        ("Maximum Capacity", data.get("crane_max_capacity")),
+        ("Boom / Jib Length", f"{data.get('boom_length',0):.2f} m"),
+        ("Operating Radius", f"{data.get('operating_radius',0):.2f} m"),
+        ("SWL at Radius", f"{data.get('swl_at_radius_kg',0):,.0f} kg"),
+        ("Forklift", data.get("forklift_details")),
+        ("Lifting Gear", data.get("lifting_gear")),
+    ])
+    mos_add_bullets(doc, ai.get("equipment_notes", []))
+
+    mos_add_title(doc, "6.0 Site Conditions and Controls", 1)
+    mos_add_key_value_table(doc, [
+        ("Ground / Floor", data.get("ground_condition")),
+        ("Access Route", data.get("access_route")),
+        ("Obstacles / Interfaces", data.get("obstacles")),
+        ("Environmental Controls", data.get("environment")),
+        ("Door Clearance", f"{data.get('door_width',0):.2f} m W × {data.get('door_height',0):.2f} m H"),
+        ("Building / Lift Height", f"{data.get('building_height',0):.2f} m"),
+        ("Crane-to-Building Distance", f"{data.get('crane_distance',0):.2f} m"),
+        ("Landing Depth", f"{data.get('landing_depth',0):.2f} m"),
+        ("Movement Route", f"{data.get('route_start')} → {data.get('route_final')}"),
+        ("Lifting Crew", data.get("lifting_crew")),
+    ])
+    mos_add_bullets(doc, ai.get("site_controls", []))
+    mos_add_title(doc, "Safety Controls", 2)
+    mos_add_bullets(doc, ai.get("safety_controls", []))
+
+    mos_add_title(doc, "7.0 Detailed Work Method and Hold Points", 1)
+    for idx, step in enumerate(ai.get("work_sequence", []), start=1):
+        mos_add_body(doc, f"{idx}. {step}")
+    mos_add_title(doc, "Mandatory Hold Points", 2)
+    mos_add_bullets(doc, ai.get("hold_points", []))
+
+    mos_add_title(doc, "8.0 Emergency / Stop Work Procedure", 1)
+    mos_add_bullets(doc, ai.get("emergency_response", []))
+    if ai.get("assumptions"):
+        mos_add_title(doc, "Planning Assumptions / Items to Verify", 2)
+        mos_add_bullets(doc, ai.get("assumptions", []))
+
+    # DRAWINGS
+    doc.add_page_break()
+    mos_add_title(doc, "9.0 Engineering & Site Drawings", 1)
+    mos_add_body(doc, "The following drawings are planning schematics generated from the dimensions entered into the EWMT system. They are not Professional Engineer drawings. Actual dimensions, crane configuration, load chart capacity, rigging and site clearances shall be verified before work.")
+
+    if site_plan_file is not None:
+        mos_add_title(doc, "9.1 Uploaded Site Plan / Customer Drawing", 2)
+        raw = site_plan_file.getvalue()
+        ext = os.path.splitext(site_plan_file.name.lower())[1]
+        if ext in (".png", ".jpg", ".jpeg"):
+            mos_add_picture_bytes(doc, BytesIO(raw), caption=site_plan_file.name, width=6.5)
+        elif ext == ".pdf":
+            try:
+                import fitz
+                pdf = fitz.open(stream=raw, filetype="pdf")
+                for pi in range(min(len(pdf), 3)):
+                    pix = pdf.load_page(pi).get_pixmap(matrix=fitz.Matrix(1.4, 1.4), alpha=False)
+                    mos_add_picture_bytes(doc, BytesIO(pix.tobytes("png")), caption=f"{site_plan_file.name} — page {pi+1}", width=6.4)
+                pdf.close()
+            except Exception as exc:
+                mos_add_body(doc, f"Site-plan PDF preview unavailable: {exc}")
+
+    drawing_specs = [
+        ("9.2 Top View", data.get("draw_top"), mos_make_top_view, "Generated top-view schematic"),
+        ("9.3 Side Elevation", data.get("draw_side"), mos_make_side_view, "Generated side-elevation schematic"),
+        ("9.4 Machinery Movement Route", data.get("draw_route"), mos_make_route_view, "Generated machinery movement-route schematic"),
+        ("9.5 Rigging Arrangement", data.get("draw_rigging"), mos_make_rigging_view, "Generated rigging schematic"),
+    ]
+    for title, enabled, fn, cap in drawing_specs:
+        if enabled:
+            mos_add_title(doc, title, 2)
+            try:
+                image_buf = fn(data)
+                if image_buf:
+                    mos_add_picture_bytes(doc, image_buf, caption=cap, width=6.6)
+                else:
+                    mos_add_body(doc, "Drawing library unavailable. Install Pillow to enable generated drawings.")
+            except Exception as exc:
+                mos_add_body(doc, f"Drawing could not be generated: {exc}")
+
+    # PHOTOS
+    doc.add_page_break()
+    mos_add_title(doc, "10.0 Site Photographs", 1)
+    if not site_photos:
+        mos_add_body(doc, "No site photographs were uploaded for this issue.")
+    else:
+        for idx, photo in enumerate(site_photos, start=1):
+            caption = photo_captions[idx-1] if idx-1 < len(photo_captions) and photo_captions[idx-1].strip() else f"Site Photograph {idx}: {photo.name}"
+            mos_add_picture_bytes(doc, mos_uploaded_image_bytes(photo), caption=caption, width=6.35)
+
+    # CERTS & ATTACHMENTS
+    doc.add_page_break()
+    mos_add_title(doc, "11.0 Certificates / Supporting Attachments", 1)
+    if not cert_items and not extra_attachments:
+        mos_add_body(doc, "No supporting certificates or attachments were selected for embedding.")
+    else:
+        mos_add_body(doc, "The following selected documents are appended for project reference. Validity and applicability shall be verified before deployment.")
+
+    for category, item in cert_items:
+        try:
+            raw = mos_download_github_item(item)
+            if raw:
+                mos_append_attachment(doc, category, item.get("name", "certificate"), raw, full_pdf=full_pdf)
+            else:
+                mos_add_body(doc, f"Could not download selected file: {item.get('name','')}")
+        except Exception as exc:
+            mos_add_body(doc, f"Could not append {item.get('name','')}: {exc}")
+
+    for uploaded in extra_attachments or []:
+        try:
+            mos_append_attachment(doc, "Supporting Attachment", uploaded.name, uploaded.getvalue(), full_pdf=full_pdf)
+        except Exception as exc:
+            mos_add_body(doc, f"Could not append {uploaded.name}: {exc}")
+
+    # APPROVAL
+    doc.add_page_break()
+    mos_add_title(doc, "12.0 Approval / Pre-Start Verification", 1)
+    mos_add_body(doc, "Before commencement, the lifting team shall review the Method Statement, Risk Assessment, lifting plan / permit-to-work where applicable, emergency arrangements and actual site conditions. Any material change shall be reviewed before proceeding.")
+    mos_add_three_col_table(doc, ["Role", "Name", "Signature / Date"], [
+        ("Prepared By", data.get("prepared_by", ""), ""),
+        ("Lifting Supervisor", data.get("lifting_supervisor", ""), ""),
+        ("Assessed / Project Manager", data.get("assessed_by", ""), ""),
+        ("Approved By", data.get("approved_by", ""), ""),
+    ])
+
+    out = BytesIO()
+    doc.save(out)
+    out.seek(0)
+    return out
+
+
 # =====================
 # DASHBOARD COUNT FUNCTIONS
 # =====================
@@ -1327,144 +2199,331 @@ if page == "🏠 Dashboard":
     """, unsafe_allow_html=True)
     
 # ======================================================
-# METHOD STATEMENT
+# PROFESSIONAL METHOD STATEMENT
 # ======================================================
 if page == "📄 Method Statement":
-    st.markdown("## 📄 Method Statement")
-    st.caption("Fill in the work details and generate a Word method statement.")
+    st.markdown("## 📄 Professional Method Statement Generator")
+    st.caption(
+        "Generate a complete project-specific MOS package with work method, site photos, "
+        "automatic schematics and optional certificate appendices."
+    )
 
-    with st.expander("Project Details", expanded=True):
-        ms_company = st.text_input("Company", "Eric Wong Machinery Transportation Pte Ltd", key="ms_company")
-        ms_project_name = st.text_input("Project Name", key="ms_project_name")
-        ms_date_input = st.date_input("Date", value=date.today(), key="ms_date_input")
-        ms_description = st.text_area("Description of Work", key="ms_description")
-        ms_machine = st.text_input("Machine Model, Dimension and Weight", key="ms_machine")
-        ms_operation_time = st.text_input("Operation Date & Time", key="ms_operation_time")
-        ms_location = st.text_input("Location of Operation", key="ms_location")
+    st.info(
+        "V1 generates a professional Word package directly — no new Word template is required. "
+        "Generated drawings are planning schematics and must be verified against the actual site / crane load chart."
+    )
 
-    with st.expander("Standard Site Information", expanded=True):
-        ms_obstacles = st.text_area(
-            "Obstacles",
-            value="Clear obstruction in way of working area and route to machine position.\nBarricade operation area to prevent persons who are not involved from entering unintentionally.",
-            key="ms_obstacles"
+    with st.expander("1. Project & Document Control", expanded=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            ms_customer = st.text_input("Customer / Tenant Company", key="pms_customer")
+            ms_project_name = st.text_input("Project Name", key="pms_project_name")
+            ms_location = st.text_input("Site Location", key="pms_location")
+            ms_description = st.text_area("Description of Work", height=110, key="pms_description")
+            ms_process = st.text_input("Process", "Lifting and Moving of Machinery", key="pms_process")
+        with c2:
+            ms_date_input = st.date_input("Operation Date", value=date.today(), key="pms_date")
+            ms_operation_time = st.text_input("Operation Time", key="pms_operation_time", placeholder="Example: 0900 hrs to 1700 hrs")
+            ms_prepared_by = st.text_input("Prepared By", "Kevin Wong", key="pms_prepared_by")
+            ms_assessed_by = st.text_input("Assessed / Project Manager", "Kevin Wong", key="pms_assessed_by")
+            ms_approved_by = st.text_input("Approved By", "Eric Wong (Director)", key="pms_approved_by")
+            ms_last_review = st.date_input("Last Review Date", value=date.today(), key="pms_last_review")
+            ms_next_review = st.date_input("Next Review Date", value=date.today() + timedelta(days=730), key="pms_next_review")
+
+    with st.expander("2. Load / Machine Details", expanded=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            ms_machine_name = st.text_input("Machine / Load Name", key="pms_machine_name")
+            ms_load_type = st.selectbox("Load Type", ["Machine", "Wooden Crate", "Machine Part", "Equipment", "Other"], key="pms_load_type")
+            ms_load_weight = st.number_input("Load Weight (kg)", min_value=0.0, value=0.0, step=100.0, key="pms_load_weight")
+            ms_rigging_weight = st.number_input("Rigging / Accessories Weight (kg)", min_value=0.0, value=0.0, step=50.0, key="pms_rigging_weight")
+        with c2:
+            ms_length = st.number_input("Length (m)", min_value=0.0, value=0.0, step=0.1, key="pms_length")
+            ms_width = st.number_input("Width (m)", min_value=0.0, value=0.0, step=0.1, key="pms_width")
+            ms_height = st.number_input("Height (m)", min_value=0.0, value=0.0, step=0.1, key="pms_height")
+            ms_cg = st.text_input("Centre of Gravity", "Estimated at geometric centre unless manufacturer information states otherwise", key="pms_cg")
+        with c3:
+            ms_lifting_points = st.text_area("Lifting Points / Support Points", height=95, key="pms_lifting_points")
+            ms_sling_angle = st.number_input("Sling Angle for Drawing (degrees)", min_value=30.0, max_value=90.0, value=60.0, step=5.0, key="pms_sling_angle")
+            ms_lift_class = st.selectbox("Lift Classification", ["Routine Lift", "Non-Routine Lift", "To Be Confirmed"], key="pms_lift_class")
+            ms_lift_reason = st.text_area("Classification Reason / Notes", height=75, key="pms_lift_reason")
+
+        total_lifted = float(ms_load_weight) + float(ms_rigging_weight)
+        st.metric("Total Lifted Weight", f"{total_lifted:,.0f} kg")
+
+    with st.expander("3. Equipment Selection & Crane Data", expanded=True):
+        st.markdown("**Select only equipment actually intended for this job.**")
+        e1, e2, e3, e4 = st.columns(4)
+        equipment = []
+        with e1:
+            if st.checkbox("Lorry Loader / Lorry Crane", key="pms_eq_lorry_crane"):
+                equipment.append("Lorry loader / lorry crane")
+            if st.checkbox("Mobile Crane", key="pms_eq_mobile_crane"):
+                equipment.append("Mobile crane")
+            if st.checkbox("Forklift", key="pms_eq_forklift"):
+                equipment.append("Forklift")
+        with e2:
+            if st.checkbox("Hydraulic Jacks", value=True, key="pms_eq_jacks"):
+                equipment.append("Hydraulic jacks")
+            if st.checkbox("Machine Skates / Rollers", value=True, key="pms_eq_skates"):
+                equipment.append("Machine skates / rollers")
+            if st.checkbox("Pallet Truck", key="pms_eq_pallet"):
+                equipment.append("Pallet truck")
+        with e3:
+            if st.checkbox("Chain Block / Lever Block", key="pms_eq_chain"):
+                equipment.append("Chain block / lever block")
+            if st.checkbox("Spreader Beam", key="pms_eq_spreader"):
+                equipment.append("Spreader beam")
+            if st.checkbox("Steel Plates", key="pms_eq_steel_plate"):
+                equipment.append("Steel plates for floor / ground protection")
+        with e4:
+            if st.checkbox("Plywood / Timber Protection", value=True, key="pms_eq_plywood"):
+                equipment.append("Plywood / timber floor protection")
+            if st.checkbox("Barricades / Cones", value=True, key="pms_eq_barricade"):
+                equipment.append("Barricades, warning signs and traffic cones")
+            if st.checkbox("Tag Lines", value=True, key="pms_eq_tagline"):
+                equipment.append("Tag lines")
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            ms_crane_model = st.text_input("Crane / Lorry Loader Make & Model", key="pms_crane_model")
+            ms_crane_lm = st.text_input("LM / LE Registration No.", key="pms_crane_lm")
+            ms_crane_max_capacity = st.text_input("Maximum Crane Capacity", key="pms_crane_max_capacity", placeholder="Example: 110 Ton")
+        with c2:
+            ms_boom_length = st.number_input("Boom / Jib Length (m)", min_value=0.0, value=0.0, step=0.5, key="pms_boom_length")
+            ms_operating_radius = st.number_input("Operating Radius (m)", min_value=0.0, value=0.0, step=0.1, key="pms_radius")
+            ms_swl_radius = st.number_input("SWL at Operating Radius (kg)", min_value=0.0, value=0.0, step=100.0, key="pms_swl_radius")
+        with c3:
+            ms_forklift_details = st.text_input("Forklift Details / Capacity", key="pms_forklift_details")
+            ms_lifting_gear = st.text_area(
+                "Lifting Gear / Moving Accessories",
+                value="Certified webbing / wire rope slings, shackles and suitable rigging accessories",
+                height=95,
+                key="pms_lifting_gear"
+            )
+
+        utilisation = (total_lifted / ms_swl_radius * 100) if ms_swl_radius > 0 else 0.0
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Total Lifted", f"{total_lifted:,.0f} kg")
+        m2.metric("SWL @ Radius", f"{ms_swl_radius:,.0f} kg" if ms_swl_radius else "Not entered")
+        m3.metric("Crane Utilisation", f"{utilisation:.1f}%" if ms_swl_radius else "Not calculated")
+        if utilisation > 100:
+            st.error("Entered total lifted weight exceeds the entered SWL at operating radius. Do not proceed on these figures.")
+        elif utilisation > 75:
+            st.warning("Entered utilisation is above 75%. Review lift classification and client/site requirements carefully.")
+
+    with st.expander("4. Site Survey / Access / Drawing Dimensions", expanded=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            ms_ground = st.text_area("Ground / Floor Condition", value="Firm, level and suitable for the intended equipment. Verify actual load-bearing condition before setup.", key="pms_ground")
+            ms_access = st.text_area("Access Route", value="Confirm access route, turning space, headroom and final machine position before mobilisation.", key="pms_access")
+            ms_obstacles = st.text_area("Obstacles / Interfaces", value="Clear obstructions in the working area and travel route. Barricade the operation area to prevent unauthorised entry.", key="pms_obstacles")
+            ms_environment = st.text_area("Environment", value="Suspend lifting work during lightning, thunderstorms, heavy rain or any condition that makes the operation unsafe.", key="pms_environment")
+        with c2:
+            d1, d2 = st.columns(2)
+            with d1:
+                ms_building_height = st.number_input("Building / Lift Height (m)", min_value=0.0, value=0.0, step=0.5, key="pms_building_height")
+                ms_crane_distance = st.number_input("Crane to Building Distance (m)", min_value=0.0, value=0.0, step=0.1, key="pms_crane_distance")
+                ms_door_width = st.number_input("Door Width (m)", min_value=0.0, value=0.0, step=0.1, key="pms_door_width")
+            with d2:
+                ms_landing_depth = st.number_input("Landing Depth into Building (m)", min_value=0.0, value=0.0, step=0.1, key="pms_landing_depth")
+                ms_door_height = st.number_input("Door Height (m)", min_value=0.0, value=0.0, step=0.1, key="pms_door_height")
+            ms_route_start = st.text_input("Movement Start Position", "Unloading / landing point", key="pms_route_start")
+            ms_route_final = st.text_input("Final Machine Position", "Designated installation position", key="pms_route_final")
+            ms_route_notes = st.text_area("Movement Route Notes", height=90, key="pms_route_notes", placeholder="Example: enter through Roller Shutter 2, turn left, travel 18 m, position beside Line 3")
+
+    with st.expander("5. Lifting Team", expanded=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            ms_lifting_supervisor = st.text_input("Lifting Supervisor", "Ibrahim / Zahari / Zaharin / Wong Yen Siong", key="pms_lifting_supervisor")
+            ms_operator = st.text_input("Equipment Operator", "Lim Poh Soon / Norhalim / Lim Poh Thian / Ngaimin / Azmi", key="pms_operator")
+        with c2:
+            ms_rigger = st.text_input("Rigger / Signalman", "Rizal / Hanifah / Aziz / Jamari / Ahmad / Rahman / Malik", key="pms_rigger")
+            ms_lifting_crew = st.text_area(
+                "Crew / Responsibility Notes",
+                value="MOM certified / qualified lifting supervisor, rigger, signalman and equipment operator shall be deployed according to the actual lifting equipment and project requirements.",
+                height=80,
+                key="pms_lifting_crew"
+            )
+
+    with st.expander("6. Site Photos, Site Plan & Automatic Drawings", expanded=True):
+        site_photos = st.file_uploader(
+            "Upload Site Photos",
+            type=["png", "jpg", "jpeg"],
+            accept_multiple_files=True,
+            key="pms_site_photos"
         )
-
-        ms_environment = st.text_area(
-            "Environment",
-            value="No operation will be carried out during heavy rain, thunderstorms and lightning weather.\nAll debris will be cleared and disposed.",
-            key="ms_environment"
+        photo_caption_text = st.text_area(
+            "Photo Captions — one line per uploaded photo (optional)",
+            height=100,
+            key="pms_photo_captions",
+            placeholder="Photo 1: Lorry crane set-up area\nPhoto 2: Roller shutter entrance\nPhoto 3: Final machine position"
         )
-
-        ms_lifting_crew = st.text_area(
-            "Lifting Crew",
-            value="MOM certified lifting supervisor, rigger, signalman and lorry loader operator will be involved in this operation.",
-            key="ms_lifting_crew"
+        site_plan_file = st.file_uploader(
+            "Upload Site Plan / Customer Drawing (optional)",
+            type=["pdf", "png", "jpg", "jpeg"],
+            key="pms_site_plan"
         )
+        st.markdown("**Automatic drawings to include**")
+        d1, d2, d3, d4 = st.columns(4)
+        draw_top = d1.checkbox("Top View", value=True, key="pms_draw_top")
+        draw_side = d2.checkbox("Side Elevation", value=True, key="pms_draw_side")
+        draw_route = d3.checkbox("Movement Route", value=True, key="pms_draw_route")
+        draw_rigging = d4.checkbox("Rigging Sketch", value=True, key="pms_draw_rigging")
 
-        ms_prepared_by = st.text_input("Prepared By", value="Kevin Wong / Zailani", key="ms_prepared_by")
+    gear_items = []
+    worker_items = []
+    github_ready = bool(github_settings().get("token") and github_settings().get("repo"))
 
-    generate_ms = st.button("📄 Generate Method Statement", key="generate_ms")
+    with st.expander("7. Certificate / Supporting Document Appendices", expanded=False):
+        st.caption("Select certificates already stored in your GitHub folders, or upload other supporting documents.")
+        if github_ready:
+            try:
+                gear_items = github_list_folder("Lifting Gears Certificate")
+                worker_items = github_list_folder("Workers Certificate")
+            except Exception as exc:
+                st.warning(f"Could not load GitHub certificate lists: {exc}")
+        else:
+            st.info("GitHub Secrets are not configured yet. You can still generate the MOS and upload supporting files manually.")
+
+        gear_by_name = {i.get("name", ""): i for i in gear_items}
+        worker_by_name = {i.get("name", ""): i for i in worker_items}
+        selected_gear_names = st.multiselect(
+            "Lifting Gear / Crane Certificates",
+            list(gear_by_name.keys()),
+            key="pms_selected_gear"
+        )
+        selected_worker_names = st.multiselect(
+            "Worker Training Certificates",
+            list(worker_by_name.keys()),
+            key="pms_selected_workers"
+        )
+        extra_attachments = st.file_uploader(
+            "Other Supporting Documents",
+            type=["pdf", "png", "jpg", "jpeg", "docx"],
+            accept_multiple_files=True,
+            key="pms_extra_attachments"
+        )
+        embed_full_pdfs = st.checkbox(
+            "Embed all pages of selected PDFs into the Word MOS",
+            value=True,
+            key="pms_embed_full_pdf"
+        )
+        st.caption("For PDF pages to be embedded, add `PyMuPDF` to requirements.txt. If it is missing, the MOS still generates but only lists the PDF attachment.")
+
+    generate_ms = st.button("🏗️ Generate Professional MOS Package", key="generate_professional_ms", type="primary")
 
     if generate_ms:
-        try:
-            with st.spinner("Generating Method Statement..."):
-                prompt = f"""
-Create a professional Method Statement for machinery moving and lifting work in Singapore.
-
-Company: {ms_company}
-Project: {ms_project_name}
-Location: {ms_location}
-Description: {ms_description}
-Machine: {ms_machine}
-Obstacles / Site Access: {ms_obstacles}
-Environment: {ms_environment}
-Lifting Crew: {ms_lifting_crew}
-
-Rules:
-- Use formal contractor wording.
-- Return plain text content for each field.
-- Do not return dictionary-looking text.
-- job_scope must be numbered steps.
-- Do not include explanation, justification, summary, conclusion, or reference to company format.
-- Do not write sentences starting with "The above", "These safety controls", "This sequence", or "This method statement".
-- Do not mention that the content is consistent with previous company documents.
-- Return only the actual content to be inserted into the Word document.
-- equipment must only list equipment and materials.
-- safety_aspect must only list safety precautions.
-- job_scope must only list work steps.
-
-Return these fields:
-equipment
-safety_aspect
-job_scope
-"""
-
-                response = client.responses.create(
-                    model="gpt-5.4",
-                    input=prompt,
-                    tools=[{
-                        "type": "file_search",
-                        "vector_store_ids": [MS_VECTOR_STORE_ID]
-                    }],
-                    text={
-                        "format": {
-                            "type": "json_schema",
-                            "name": "ms_schema",
-                            "schema": {
-                                "type": "object",
-                                "additionalProperties": False,
-                                "properties": {
-                                    "equipment": {"type": "string"},
-                                    "safety_aspect": {"type": "string"},
-                                    "job_scope": {"type": "string"}
-                                },
-                                "required": ["equipment", "safety_aspect", "job_scope"]
-                            }
-                        }
+        required = {
+            "Customer / Tenant Company": ms_customer,
+            "Project Name": ms_project_name,
+            "Site Location": ms_location,
+            "Description of Work": ms_description,
+            "Machine / Load Name": ms_machine_name,
+        }
+        missing_fields = [label for label, value in required.items() if not str(value).strip()]
+        if missing_fields:
+            st.error("Please complete: " + ", ".join(missing_fields))
+        else:
+            try:
+                with st.spinner("Generating project-specific method, drawings and Word package..."):
+                    data = {
+                        "customer": ms_customer,
+                        "project_name": ms_project_name,
+                        "location": ms_location,
+                        "description": ms_description,
+                        "process": ms_process,
+                        "operation_date": str(ms_date_input),
+                        "operation_time": ms_operation_time,
+                        "prepared_by": ms_prepared_by,
+                        "assessed_by": ms_assessed_by,
+                        "approved_by": ms_approved_by,
+                        "last_review": str(ms_last_review),
+                        "next_review": str(ms_next_review),
+                        "machine_name": ms_machine_name,
+                        "load_type": ms_load_type,
+                        "load_weight_kg": float(ms_load_weight),
+                        "rigging_weight_kg": float(ms_rigging_weight),
+                        "total_lifted_kg": total_lifted,
+                        "length_m": float(ms_length),
+                        "width_m": float(ms_width),
+                        "height_m": float(ms_height),
+                        "cg": ms_cg,
+                        "lifting_points": ms_lifting_points,
+                        "sling_angle": float(ms_sling_angle),
+                        "lift_classification": ms_lift_class,
+                        "lift_reason": ms_lift_reason,
+                        "equipment": equipment,
+                        "crane_model": ms_crane_model,
+                        "crane_lm": ms_crane_lm,
+                        "crane_max_capacity": ms_crane_max_capacity,
+                        "boom_length": float(ms_boom_length),
+                        "operating_radius": float(ms_operating_radius),
+                        "swl_at_radius_kg": float(ms_swl_radius),
+                        "utilisation_pct": float(utilisation),
+                        "forklift_details": ms_forklift_details,
+                        "lifting_gear": ms_lifting_gear,
+                        "ground_condition": ms_ground,
+                        "access_route": ms_access,
+                        "obstacles": ms_obstacles,
+                        "environment": ms_environment,
+                        "building_height": float(ms_building_height),
+                        "crane_distance": float(ms_crane_distance),
+                        "landing_depth": float(ms_landing_depth),
+                        "door_width": float(ms_door_width),
+                        "door_height": float(ms_door_height),
+                        "route_start": ms_route_start,
+                        "route_final": ms_route_final,
+                        "route_notes": ms_route_notes,
+                        "lifting_supervisor": ms_lifting_supervisor,
+                        "operator": ms_operator,
+                        "rigger": ms_rigger,
+                        "lifting_crew": ms_lifting_crew,
+                        "draw_top": draw_top,
+                        "draw_side": draw_side,
+                        "draw_route": draw_route,
+                        "draw_rigging": draw_rigging,
                     }
-                )
 
-                data = json.loads(response.output_text)
+                    ai_content = mos_generate_ai_content(data)
+                    captions = [line.strip() for line in photo_caption_text.splitlines() if line.strip()]
 
-                data["equipment"] = clean_ms_text(data["equipment"])
-                data["safety_aspect"] = clean_ms_text(data["safety_aspect"])
-                data["job_scope"] = clean_ms_text(data["job_scope"])
+                    selected_cert_items = []
+                    for name in selected_gear_names:
+                        if name in gear_by_name:
+                            selected_cert_items.append(("Lifting Equipment / Gear Certificate", gear_by_name[name]))
+                    for name in selected_worker_names:
+                        if name in worker_by_name:
+                            selected_cert_items.append(("Worker Training Certificate", worker_by_name[name]))
 
-                doc = Document(MS_TEMPLATE)
+                    buffer = mos_build_professional_doc(
+                        data=data,
+                        ai=ai_content,
+                        site_photos=site_photos or [],
+                        photo_captions=captions,
+                        site_plan_file=site_plan_file,
+                        cert_items=selected_cert_items,
+                        extra_attachments=extra_attachments or [],
+                        full_pdf=embed_full_pdfs,
+                    )
 
-                replace_all(doc, {
-                    "{{company}}": safe_text(ms_company),
-                    "{{project_name}}": safe_text(ms_project_name),
-                    "{{date}}": str(ms_date_input),
-                    "{{location}}": safe_text(ms_location),
-                    "{{description_of_work}}": safe_text(ms_description),
-                    "{{machine_spec}}": safe_text(ms_machine),
-                    "{{equipment}}": safe_text(data["equipment"]),
-                    "{{safety_aspect}}": safe_text(data["safety_aspect"]),
-                    "{{job_scope}}": safe_text(data["job_scope"]),
-                    "{{risk_assessment_note}}": "Refer as attached",
-                    "{{operation_date}}": str(ms_date_input),
-                    "{{operation_time}}": safe_text(ms_operation_time),
-                    "{{obstacles}}": safe_text(ms_obstacles),
-                    "{{environment}}": safe_text(ms_environment),
-                    "{{lifting_crew}}": safe_text(ms_lifting_crew),
-                    "{{prepared_by}}": safe_text(ms_prepared_by),
-                })
+                    safe_project = re.sub(r"[^A-Za-z0-9_-]+", "_", ms_project_name.strip())[:50] or "Project"
+                    st.success("Professional Method Statement package generated.")
+                    st.download_button(
+                        "⬇️ Download Professional MOS (.docx)",
+                        buffer,
+                        file_name=f"EWMT_Professional_MOS_{safe_project}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True,
+                    )
 
-                buffer = BytesIO()
-                doc.save(buffer)
-                buffer.seek(0)
+                    with st.expander("Preview AI-generated work sequence"):
+                        for i, step in enumerate(ai_content.get("work_sequence", []), start=1):
+                            st.write(f"{i}. {step}")
 
-                st.download_button(
-                    "Download Method Statement",
-                    buffer,
-                    "Method_Statement.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-
-        except Exception as e:
-            st.error("Method Statement generation failed")
-            st.exception(e)
+            except Exception as e:
+                st.error("Professional Method Statement generation failed")
+                st.exception(e)
 
 
 # ======================================================
