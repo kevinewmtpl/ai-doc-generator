@@ -1349,34 +1349,86 @@ def mos_canvas(title):
 
 
 def mos_make_top_view(data):
-    img, draw = mos_canvas("Top View – Crane / Building / Landing Arrangement")
+    operation_type = data.get("operation_type", "")
+    is_upper = operation_type == "Upper Floor / Roof Hoisting"
+
+    title = (
+        "Top View – Crane / Building / Landing Arrangement"
+        if is_upper
+        else "Top View – Ground-Level Hoisting Arrangement"
+    )
+    img, draw = mos_canvas(title)
     if img is None:
         return None
+
     f = mos_get_font(28, False)
     fb = mos_get_font(28, True)
-    # building
-    draw.rounded_rectangle((980, 210, 1510, 720), radius=16, fill="#D7E7F0", outline="#17324D", width=5)
-    draw.text((1120, 430), "BUILDING", fill="#17324D", font=fb)
-    # door opening
-    draw.rectangle((970, 390, 1000, 545), fill="white", outline="#C0392B", width=4)
-    draw.text((1010, 360), f"Door {data.get('door_width', 0):.1f} m W", fill="#C0392B", font=f)
-    # crane body
-    draw.rounded_rectangle((370, 330, 650, 600), radius=18, fill="#F4B942", outline="#7A4B00", width=5)
-    draw.text((430, 450), "CRANE", fill="#4A2B00", font=fb)
-    # outriggers
+    fs = mos_get_font(22, False)
+
+    # Crane body and outriggers
+    draw.rounded_rectangle((290, 330, 570, 600), radius=18, fill="#F4B942", outline="#7A4B00", width=5)
+    draw.text((350, 450), "CRANE", fill="#4A2B00", font=fb)
     for y in (365, 565):
-        draw.line((250, y, 770, y), fill="#444444", width=12)
-        draw.ellipse((220, y-22, 265, y+22), fill="#B0B7BE", outline="#333333")
-        draw.ellipse((755, y-22, 800, y+22), fill="#B0B7BE", outline="#333333")
-    # boom and load
-    draw.line((590, 420, 1120, 465), fill="#C0392B", width=18)
-    draw.ellipse((1100, 445, 1140, 485), fill="#111111")
-    draw.rounded_rectangle((1160, 420, 1365, 520), radius=10, fill="#E8EEF2", outline="#111111", width=4)
-    draw.text((1200, 450), "LOAD", fill="#111111", font=fb)
-    mos_arrow(draw, (1140, 465), (1190, 465), fill="#C0392B", width=7)
-    draw.text((900, 660), f"Crane to building ≈ {data.get('crane_distance', 0):.1f} m", fill="#17324D", font=f)
-    draw.text((1040, 750), f"Landing depth ≈ {data.get('landing_depth', 0):.1f} m", fill="#17324D", font=f)
-    draw.text((70, 805), "Schematic – verify all dimensions against actual site survey before work.", fill="#64748B", font=mos_get_font(22))
+        draw.line((170, y, 690, y), fill="#444444", width=12)
+        draw.ellipse((140, y-22, 185, y+22), fill="#B0B7BE", outline="#333333")
+        draw.ellipse((675, y-22, 720, y+22), fill="#B0B7BE", outline="#333333")
+
+    if is_upper:
+        # Building arrangement only for elevated / upper-floor work.
+        draw.rounded_rectangle((980, 210, 1510, 720), radius=16, fill="#D7E7F0", outline="#17324D", width=5)
+        draw.text((1120, 430), "BUILDING", fill="#17324D", font=fb)
+
+        if data.get("door_width", 0) > 0:
+            draw.rectangle((970, 390, 1000, 545), fill="white", outline="#C0392B", width=4)
+            draw.text((1010, 360), f"Opening {data.get('door_width', 0):.1f} m W", fill="#C0392B", font=f)
+
+        draw.line((520, 420, 1115, 465), fill="#C0392B", width=18)
+        draw.ellipse((1095, 445, 1135, 485), fill="#111111")
+        draw.rounded_rectangle((1160, 420, 1365, 520), radius=10, fill="#E8EEF2", outline="#111111", width=4)
+        draw.text((1200, 450), "LOAD", fill="#111111", font=fb)
+        mos_arrow(draw, (1135, 465), (1190, 465), fill="#C0392B", width=7)
+
+        if data.get("crane_distance", 0) > 0:
+            draw.text((815, 660), f"Crane to building ≈ {data.get('crane_distance', 0):.1f} m", fill="#17324D", font=f)
+        if data.get("landing_depth", 0) > 0:
+            draw.text((1030, 750), f"Landing depth ≈ {data.get('landing_depth', 0):.1f} m", fill="#17324D", font=f)
+    else:
+        # Ground-level arrangement: no artificial building or door.
+        draw.rounded_rectangle((840, 270, 1110, 420), radius=16, fill="#E8EEF2", outline="#17324D", width=5)
+        draw.text((900, 325), "PICK-UP\nLOAD", fill="#17324D", font=fb, spacing=4)
+
+        draw.rounded_rectangle((1220, 500, 1510, 665), radius=16, fill="#DDEFE0", outline="#2E7D32", width=5)
+        final_label = data.get("route_final") or "LANDING / FINAL POSITION"
+        draw.multiline_text(
+            (1250, 545),
+            textwrap.fill(final_label, width=19),
+            fill="#1B5E20",
+            font=f,
+            spacing=4
+        )
+
+        # Boom / hoisting path and landing direction
+        draw.line((520, 420, 930, 345), fill="#C0392B", width=18)
+        mos_arrow(draw, (975, 410), (1290, 535), fill="#0B5A7A", width=8, head=24)
+
+        # Exclusion zone
+        draw.rounded_rectangle((765, 205, 1540, 710), radius=20, outline="#C0392B", width=4)
+        draw.text((830, 725), "BARRICADED / EXCLUSION ZONE", fill="#C0392B", font=fb)
+
+        if data.get("operating_radius", 0) > 0:
+            draw.text(
+                (705, 760),
+                f"Entered operating radius ≈ {data.get('operating_radius', 0):.1f} m",
+                fill="#17324D",
+                font=f
+            )
+
+    draw.text(
+        (70, 835),
+        "Planning schematic only – verify actual set-up, clearances, load chart, ground conditions and lifting arrangement before work.",
+        fill="#64748B",
+        font=fs
+    )
     out = BytesIO()
     img.save(out, format="PNG")
     out.seek(0)
@@ -1384,35 +1436,68 @@ def mos_make_top_view(data):
 
 
 def mos_make_side_view(data):
-    img, draw = mos_canvas("Side Elevation – Lifting Geometry")
+    operation_type = data.get("operation_type", "")
+    is_upper = operation_type == "Upper Floor / Roof Hoisting"
+
+    title = "Side Elevation – Lifting Geometry" if is_upper else "Side Elevation – Ground-Level Hoisting"
+    img, draw = mos_canvas(title)
     if img is None:
         return None
+
     f = mos_get_font(28, False)
     fb = mos_get_font(28, True)
+    fs = mos_get_font(22, False)
     ground_y = 745
     draw.line((70, ground_y, 1530, ground_y), fill="#555555", width=5)
-    # building
-    draw.rectangle((1110, 180, 1500, ground_y), fill="#D7E7F0", outline="#17324D", width=5)
-    draw.text((1225, 420), "BUILDING", fill="#17324D", font=fb)
-    # landing opening
-    landing_y = max(245, min(630, ground_y - int((data.get('building_height', 18.0) / max(data.get('building_height', 18.0), 1)) * 430)))
-    draw.rectangle((1100, landing_y-65, 1130, landing_y+65), fill="white", outline="#C0392B", width=4)
+
+    # Crane
     draw.rounded_rectangle((260, 590, 550, ground_y), radius=12, fill="#F4B942", outline="#7A4B00", width=5)
     draw.text((330, 645), "CRANE", fill="#4A2B00", font=fb)
-    # boom
     pivot = (490, 610)
-    elbow = (780, 265)
-    tip = (1130, landing_y)
-    draw.line([pivot, elbow, tip], fill="#C0392B", width=20, joint="curve")
-    # load
-    draw.rectangle((1135, landing_y-40, 1340, landing_y+40), fill="#E8EEF2", outline="#111111", width=4)
-    draw.text((1190, landing_y-18), "LOAD", fill="#111111", font=f)
-    # dimensions
-    mos_arrow(draw, (1520, ground_y), (1520, 185), fill="#0B5A7A", width=5, head=18)
-    draw.text((1330, 130), f"Building height {data.get('building_height',0):.1f} m", fill="#0B5A7A", font=f)
-    mos_arrow(draw, (550, 800), (1110, 800), fill="#0B5A7A", width=5, head=18)
-    draw.text((650, 815), f"Crane to building {data.get('crane_distance',0):.1f} m", fill="#0B5A7A", font=f)
-    draw.text((80, 805), f"Boom length entered: {data.get('boom_length',0):.1f} m  •  Operating radius: {data.get('operating_radius',0):.1f} m", fill="#64748B", font=mos_get_font(22))
+
+    if is_upper:
+        # Building is only drawn for upper-floor / roof lifting.
+        draw.rectangle((1110, 180, 1500, ground_y), fill="#D7E7F0", outline="#17324D", width=5)
+        draw.text((1225, 420), "BUILDING", fill="#17324D", font=fb)
+
+        entered_height = max(float(data.get("building_height", 0) or 0), 0.1)
+        landing_y = 315
+        if entered_height > 0:
+            landing_y = max(245, min(620, int(ground_y - 430)))
+
+        draw.rectangle((1100, landing_y-65, 1130, landing_y+65), fill="white", outline="#C0392B", width=4)
+        elbow = (780, 265)
+        tip = (1130, landing_y)
+        draw.line([pivot, elbow, tip], fill="#C0392B", width=20, joint="curve")
+        draw.rectangle((1135, landing_y-40, 1340, landing_y+40), fill="#E8EEF2", outline="#111111", width=4)
+        draw.text((1190, landing_y-18), "LOAD", fill="#111111", font=f)
+
+        if data.get("building_height", 0) > 0:
+            mos_arrow(draw, (1520, ground_y), (1520, 185), fill="#0B5A7A", width=5, head=18)
+            draw.text((1280, 130), f"Lift height {data.get('building_height',0):.1f} m", fill="#0B5A7A", font=f)
+        if data.get("crane_distance", 0) > 0:
+            mos_arrow(draw, (550, 800), (1110, 800), fill="#0B5A7A", width=5, head=18)
+            draw.text((650, 815), f"Crane to structure {data.get('crane_distance',0):.1f} m", fill="#0B5A7A", font=f)
+    else:
+        # Ground-level lift: show a simple lift from pick-up point to ground landing.
+        load_y = 600
+        draw.rounded_rectangle((1010, load_y-65, 1250, load_y+65), radius=12, fill="#E8EEF2", outline="#17324D", width=5)
+        draw.text((1070, load_y-15), "LOAD", fill="#17324D", font=fb)
+        elbow = (760, 330)
+        tip = (1130, load_y-65)
+        draw.line([pivot, elbow, tip], fill="#C0392B", width=20, joint="curve")
+        mos_arrow(draw, (1250, load_y), (1430, load_y), fill="#0B5A7A", width=7, head=22)
+        draw.text((1270, load_y-50), "GROUND LANDING", fill="#2E7D32", font=f)
+
+        if data.get("operating_radius", 0) > 0:
+            draw.text((700, 790), f"Operating radius entered: {data.get('operating_radius',0):.1f} m", fill="#0B5A7A", font=f)
+
+    draw.text(
+        (80, 835),
+        f"Boom / jib length entered: {data.get('boom_length',0):.1f} m  •  Verify actual geometry and crane load-chart capacity before lifting.",
+        fill="#64748B",
+        font=fs
+    )
     out = BytesIO()
     img.save(out, format="PNG")
     out.seek(0)
@@ -1423,16 +1508,28 @@ def mos_make_route_view(data):
     img, draw = mos_canvas("Machinery Movement Route – Schematic")
     if img is None:
         return None
+
     f = mos_get_font(27, False)
-    fb = mos_get_font(27, True)
+    operation_type = data.get("operation_type", "")
     points = [(180, 600), (510, 600), (770, 430), (1050, 430), (1350, 260)]
+
+    if operation_type == "Indoor Machinery Shifting":
+        middle_labels = ["Door / Entrance", "Internal Route", "Turning / Transfer"]
+    elif operation_type == "Ground Floor - Unload / Shift / Position":
+        middle_labels = ["Transfer Point", "Travel Route", "Turning / Alignment"]
+    elif operation_type == "Loading / Unloading Only":
+        middle_labels = ["Loading Zone", "Transfer Point", "Landing Area"]
+    else:
+        middle_labels = ["Transfer Point", "Intermediate Point", "Turning / Alignment"]
+
     labels = [
-        data.get("route_start", "Unloading Point") or "Unloading Point",
-        "Door / Entrance",
-        "Intermediate Point",
-        "Turning / Transfer",
+        data.get("route_start", "Starting Position") or "Starting Position",
+        middle_labels[0],
+        middle_labels[1],
+        middle_labels[2],
         data.get("route_final", "Final Position") or "Final Position",
     ]
+
     for i, pt in enumerate(points):
         x, y = pt
         draw.rounded_rectangle((x-105, y-45, x+105, y+45), radius=16, fill="#EAF2F7", outline="#17324D", width=4)
@@ -1440,9 +1537,25 @@ def mos_make_route_view(data):
         draw.multiline_text((x-90, y-25), wrapped, fill="#17324D", font=f, align="center", spacing=4)
         if i < len(points)-1:
             mos_arrow(draw, (x+110, y), (points[i+1][0]-110, points[i+1][1]), fill="#0B5A7A", width=8)
-    if data.get("route_notes"):
+
+    notes = data.get("route_notes", "")
+    travel_distance = float(data.get("travel_distance_m", 0) or 0)
+    note_lines = []
+    if travel_distance > 0:
+        note_lines.append(f"Approximate travel distance: {travel_distance:.1f} m")
+    if notes:
+        note_lines.append(notes)
+
+    if note_lines:
         draw.rounded_rectangle((140, 705, 1450, 830), radius=15, fill="#F8FAFC", outline="#94A3B8", width=3)
-        draw.multiline_text((175, 730), textwrap.fill(data.get("route_notes"), 105), fill="#334155", font=mos_get_font(23), spacing=5)
+        draw.multiline_text(
+            (175, 730),
+            textwrap.fill(" • ".join(note_lines), 105),
+            fill="#334155",
+            font=mos_get_font(23),
+            spacing=5
+        )
+
     out = BytesIO()
     img.save(out, format="PNG")
     out.seek(0)
@@ -1570,7 +1683,62 @@ def mos_append_attachment(doc, title, filename, raw_bytes, full_pdf=True):
 
 
 def mos_generate_ai_content(data):
-    selected_equipment = ", ".join(data.get("equipment", []))
+    selected_equipment = ", ".join(data.get("equipment", [])) or "No equipment selection entered"
+
+    site_lines = [
+        f"Operation type: {data.get('operation_type')}",
+        f"Ground / floor: {data.get('ground_condition')}",
+        f"Site access: {data.get('access_route')}",
+        f"Obstacles / interfaces: {data.get('obstacles')}",
+        f"Environment: {data.get('environment')}",
+    ]
+
+    if data.get("special_site_notes"):
+        site_lines.append(f"Additional site notes: {data.get('special_site_notes')}")
+
+    operation_type = data.get("operation_type", "")
+    if operation_type == "Upper Floor / Roof Hoisting":
+        if data.get("building_height", 0) > 0:
+            site_lines.append(f"Building / lift height: {data.get('building_height')} m")
+        if data.get("crane_distance", 0) > 0:
+            site_lines.append(f"Crane-to-building distance: {data.get('crane_distance')} m")
+        if data.get("landing_depth", 0) > 0:
+            site_lines.append(f"Landing depth: {data.get('landing_depth')} m")
+        if data.get("door_width", 0) > 0 or data.get("door_height", 0) > 0:
+            site_lines.append(f"Opening clearance: {data.get('door_width')} m W x {data.get('door_height')} m H")
+    elif operation_type == "Indoor Machinery Shifting":
+        if data.get("door_width", 0) > 0 or data.get("door_height", 0) > 0:
+            site_lines.append(f"Minimum opening clearance: {data.get('door_width')} m W x {data.get('door_height')} m H")
+        if data.get("travel_distance_m", 0) > 0:
+            site_lines.append(f"Approximate machinery travel distance: {data.get('travel_distance_m')} m")
+    elif data.get("travel_distance_m", 0) > 0:
+        site_lines.append(f"Approximate movement distance: {data.get('travel_distance_m')} m")
+
+    if data.get("route_start"):
+        site_lines.append(f"Movement / pick-up start: {data.get('route_start')}")
+    if data.get("route_final"):
+        site_lines.append(f"Landing / final position: {data.get('route_final')}")
+    if data.get("route_notes"):
+        site_lines.append(f"Movement / hoisting notes: {data.get('route_notes')}")
+    if data.get("custom_operation_details"):
+        site_lines.append(f"Custom operation arrangement: {data.get('custom_operation_details')}")
+
+    site_context = "\n".join(site_lines)
+
+    crane_lines = []
+    if data.get("crane_model") or data.get("operating_radius", 0) > 0:
+        crane_lines.extend([
+            f"Crane / lorry loader: {data.get('crane_model')}",
+            f"Operating radius: {data.get('operating_radius')} m",
+            f"SWL at operating radius: {data.get('swl_at_radius_kg')} kg",
+            f"Boom / jib length: {data.get('boom_length')} m",
+        ])
+    if data.get("forklift_details"):
+        crane_lines.append(f"Forklift: {data.get('forklift_details')}")
+    if data.get("lifting_gear"):
+        crane_lines.append(f"Lifting / moving gear: {data.get('lifting_gear')}")
+    equipment_context = "\n".join(crane_lines)
+
     prompt = f"""
 Prepare PROJECT-SPECIFIC professional Method Statement content for Eric Wong Machinery Transportation Pte Ltd.
 Use Singapore machinery moving / lifting contractor wording.
@@ -1581,6 +1749,7 @@ Project: {data.get('project_name')}
 Location: {data.get('location')}
 Description: {data.get('description')}
 Process: {data.get('process')}
+Operation type: {data.get('operation_type')}
 Operation date/time: {data.get('operation_date')} {data.get('operation_time')}
 
 LOAD
@@ -1590,41 +1759,32 @@ Weight: {data.get('load_weight_kg')} kg
 Rigging weight: {data.get('rigging_weight_kg')} kg
 Dimensions L/W/H: {data.get('length_m')} / {data.get('width_m')} / {data.get('height_m')} m
 Centre of gravity: {data.get('cg')}
-Lifting points: {data.get('lifting_points')}
+Lifting points / support points: {data.get('lifting_points')}
 Lift classification: {data.get('lift_classification')}
 
 SELECTED EQUIPMENT - ONLY USE THESE UNLESS A SAFETY ITEM IS NECESSARY
 {selected_equipment}
-Crane: {data.get('crane_model')}
-Operating radius: {data.get('operating_radius')} m
-SWL at operating radius: {data.get('swl_at_radius_kg')} kg
-Boom length: {data.get('boom_length')} m
-Lifting gear: {data.get('lifting_gear')}
-Forklift: {data.get('forklift_details')}
+{equipment_context}
 
-SITE
-Ground: {data.get('ground_condition')}
-Access route: {data.get('access_route')}
-Obstacles: {data.get('obstacles')}
-Environment: {data.get('environment')}
-Door clearance: {data.get('door_width')} m W x {data.get('door_height')} m H
-Building / lift height: {data.get('building_height')} m
-Crane-to-building distance: {data.get('crane_distance')} m
-Landing depth: {data.get('landing_depth')} m
-Movement start: {data.get('route_start')}
-Final position: {data.get('route_final')}
-Route notes: {data.get('route_notes')}
+SITE / MOVEMENT ARRANGEMENT
+{site_context}
 
 PERSONNEL
 {data.get('lifting_crew')}
 
 Rules:
-- Be site specific. Do not produce a generic equipment shopping list.
+- Be site specific. Adapt the work sequence to the selected OPERATION TYPE.
+- Never invent a building, upper floor, door opening or landing depth when those details are not applicable.
+- Do not mention building height, door clearance, crane-to-building distance or landing depth unless they were actually provided and relevant to this operation.
+- For ground-floor crane hoisting, describe a ground-level pick-up, controlled hoist and ground-level landing unless the user specifically states otherwise.
+- For indoor machinery shifting, focus on floor protection, access clearance, jacking/skates/forklift/pallet-truck movement and final positioning as applicable to the selected equipment.
+- For loading/unloading only, do not invent an internal machinery-moving route after the load has been landed or loaded.
+- Do not produce a generic equipment shopping list.
 - Do not state "where required" repeatedly. Mention equipment that was actually selected.
-- Work sequence should normally have 12 to 25 precise steps.
-- Include trial lift where a crane/lorry loader lift is selected.
+- Work sequence should normally have 10 to 22 precise steps, but keep simple jobs shorter when appropriate.
+- Include a trial lift only when crane / lorry loader hoisting is actually part of the selected equipment or operation.
 - Include floor protection / steel plates / plywood only if selected or stated in the site information.
-- State hold points that the lifting supervisor must verify before proceeding.
+- State hold points that the supervisor / lifting supervisor must verify before proceeding.
 - Include STOP WORK triggers for unsafe conditions.
 - Do not claim engineering calculations have been performed unless the provided numbers show them.
 - Do not invent certificates, registration numbers, load chart capacity, dimensions, personnel names or client requirements.
@@ -1665,6 +1825,59 @@ Rules:
     return json.loads(response.output_text)
 
 
+def mos_site_condition_rows(data):
+    """Build only the project-site rows that are actually relevant to the selected operation."""
+    rows = [
+        ("Type of Operation", data.get("operation_type")),
+        ("Ground / Floor", data.get("ground_condition")),
+        ("Site Access", data.get("access_route")),
+    ]
+
+    if data.get("obstacles"):
+        rows.append(("Obstacles / Interfaces", data.get("obstacles")))
+    if data.get("environment"):
+        rows.append(("Environmental Controls", data.get("environment")))
+    if data.get("special_site_notes"):
+        rows.append(("Additional Site Notes", data.get("special_site_notes")))
+
+    operation_type = data.get("operation_type", "")
+
+    if operation_type == "Upper Floor / Roof Hoisting":
+        if data.get("building_height", 0) > 0:
+            rows.append(("Building / Lift Height", f"{data.get('building_height',0):.2f} m"))
+        if data.get("crane_distance", 0) > 0:
+            rows.append(("Crane-to-Building Distance", f"{data.get('crane_distance',0):.2f} m"))
+        if data.get("landing_depth", 0) > 0:
+            rows.append(("Landing Depth", f"{data.get('landing_depth',0):.2f} m"))
+        if data.get("door_width", 0) > 0 or data.get("door_height", 0) > 0:
+            rows.append(("Opening Clearance", f"{data.get('door_width',0):.2f} m W × {data.get('door_height',0):.2f} m H"))
+
+    elif operation_type == "Indoor Machinery Shifting":
+        if data.get("door_width", 0) > 0 or data.get("door_height", 0) > 0:
+            rows.append(("Minimum Opening Clearance", f"{data.get('door_width',0):.2f} m W × {data.get('door_height',0):.2f} m H"))
+        if data.get("travel_distance_m", 0) > 0:
+            rows.append(("Approx. Travel Distance", f"{data.get('travel_distance_m',0):.2f} m"))
+
+    elif operation_type == "Ground Floor - Unload / Shift / Position":
+        if data.get("travel_distance_m", 0) > 0:
+            rows.append(("Approx. Travel Distance", f"{data.get('travel_distance_m',0):.2f} m"))
+
+    if data.get("route_start") or data.get("route_final"):
+        route_text = " → ".join(
+            [x for x in [data.get("route_start"), data.get("route_final")] if str(x or "").strip()]
+        )
+        rows.append(("Movement / Landing Arrangement", route_text))
+
+    if data.get("route_notes"):
+        rows.append(("Movement / Hoisting Notes", data.get("route_notes")))
+
+    if data.get("custom_operation_details"):
+        rows.append(("Custom Operation Details", data.get("custom_operation_details")))
+
+    rows.append(("Lifting / Moving Crew", data.get("lifting_crew")))
+    return rows
+
+
 def mos_build_professional_doc(data, ai, site_photos, photo_captions, site_plan_file, cert_items, extra_attachments, full_pdf=True):
     doc = Document()
     project_meta = {
@@ -1690,6 +1903,7 @@ def mos_build_professional_doc(data, ai, site_photos, photo_captions, site_plan_
         ("Project", data.get("project_name")),
         ("Site Location", data.get("location")),
         ("Process", data.get("process")),
+        ("Type of Operation", data.get("operation_type")),
         ("Operation Date / Time", f"{data.get('operation_date')}  {data.get('operation_time')}"),
         ("Prepared By", data.get("prepared_by")),
         ("Approved By", data.get("approved_by")),
@@ -1775,6 +1989,7 @@ def mos_build_professional_doc(data, ai, site_photos, photo_captions, site_plan_
     mos_add_body(doc, ai.get("executive_summary", ""))
     mos_add_key_value_table(doc, [
         ("Description of Work", data.get("description")),
+        ("Type of Operation", data.get("operation_type")),
         ("Machine / Load", data.get("machine_name")),
         ("Load Type", data.get("load_type")),
         ("Load Weight", f"{data.get('load_weight_kg',0):,.0f} kg"),
@@ -1800,18 +2015,7 @@ def mos_build_professional_doc(data, ai, site_photos, photo_captions, site_plan_
     mos_add_bullets(doc, ai.get("equipment_notes", []))
 
     mos_add_title(doc, "6.0 Site Conditions and Controls", 1)
-    mos_add_key_value_table(doc, [
-        ("Ground / Floor", data.get("ground_condition")),
-        ("Access Route", data.get("access_route")),
-        ("Obstacles / Interfaces", data.get("obstacles")),
-        ("Environmental Controls", data.get("environment")),
-        ("Door Clearance", f"{data.get('door_width',0):.2f} m W × {data.get('door_height',0):.2f} m H"),
-        ("Building / Lift Height", f"{data.get('building_height',0):.2f} m"),
-        ("Crane-to-Building Distance", f"{data.get('crane_distance',0):.2f} m"),
-        ("Landing Depth", f"{data.get('landing_depth',0):.2f} m"),
-        ("Movement Route", f"{data.get('route_start')} → {data.get('route_final')}"),
-        ("Lifting Crew", data.get("lifting_crew")),
-    ])
+    mos_add_key_value_table(doc, mos_site_condition_rows(data))
     mos_add_bullets(doc, ai.get("site_controls", []))
     mos_add_title(doc, "Safety Controls", 2)
     mos_add_bullets(doc, ai.get("safety_controls", []))
@@ -2204,15 +2408,18 @@ if page == "🏠 Dashboard":
 if page == "📄 Method Statement":
     st.markdown("## 📄 Professional Method Statement Generator")
     st.caption(
-        "Generate a complete project-specific MOS package with work method, site photos, "
-        "automatic schematics and optional certificate appendices."
+        "Generate a project-specific MOS package. The form now shows only the site and drawing "
+        "information relevant to the selected type of operation."
     )
 
     st.info(
-        "V1 generates a professional Word package directly — no new Word template is required. "
-        "Generated drawings are planning schematics and must be verified against the actual site / crane load chart."
+        "Select the operation type first. Ground-floor work will not ask for building height / door dimensions "
+        "unless they are actually relevant. Standard EWMT safety controls remain automatic."
     )
 
+    # --------------------------------------------------
+    # 1. PROJECT & DOCUMENT CONTROL
+    # --------------------------------------------------
     with st.expander("1. Project & Document Control", expanded=True):
         c1, c2 = st.columns(2)
         with c1:
@@ -2220,16 +2427,37 @@ if page == "📄 Method Statement":
             ms_project_name = st.text_input("Project Name", key="pms_project_name")
             ms_location = st.text_input("Site Location", key="pms_location")
             ms_description = st.text_area("Description of Work", height=110, key="pms_description")
+
+            operation_options = [
+                "Ground Floor - Unload / Shift / Position",
+                "Ground Floor - Crane / Lorry Crane Hoisting",
+                "Upper Floor / Roof Hoisting",
+                "Indoor Machinery Shifting",
+                "Loading / Unloading Only",
+                "Custom",
+            ]
+            ms_operation_type = st.selectbox(
+                "Type of Operation",
+                operation_options,
+                key="pms_operation_type",
+                help="This controls which site questions and drawings appear later."
+            )
             ms_process = st.text_input("Process", "Lifting and Moving of Machinery", key="pms_process")
+
         with c2:
             ms_date_input = st.date_input("Operation Date", value=date.today(), key="pms_date")
             ms_operation_time = st.text_input("Operation Time", key="pms_operation_time", placeholder="Example: 0900 hrs to 1700 hrs")
             ms_prepared_by = st.text_input("Prepared By", "Kevin Wong", key="pms_prepared_by")
             ms_assessed_by = st.text_input("Assessed / Project Manager", "Kevin Wong", key="pms_assessed_by")
             ms_approved_by = st.text_input("Approved By", "Eric Wong (Director)", key="pms_approved_by")
-            ms_last_review = st.date_input("Last Review Date", value=date.today(), key="pms_last_review")
-            ms_next_review = st.date_input("Next Review Date", value=date.today() + timedelta(days=730), key="pms_next_review")
 
+            with st.expander("Document review dates", expanded=False):
+                ms_last_review = st.date_input("Last Review Date", value=date.today(), key="pms_last_review")
+                ms_next_review = st.date_input("Next Review Date", value=date.today() + timedelta(days=730), key="pms_next_review")
+
+    # --------------------------------------------------
+    # 2. LOAD / MACHINE DETAILS
+    # --------------------------------------------------
     with st.expander("2. Load / Machine Details", expanded=True):
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -2237,116 +2465,533 @@ if page == "📄 Method Statement":
             ms_load_type = st.selectbox("Load Type", ["Machine", "Wooden Crate", "Machine Part", "Equipment", "Other"], key="pms_load_type")
             ms_load_weight = st.number_input("Load Weight (kg)", min_value=0.0, value=0.0, step=100.0, key="pms_load_weight")
             ms_rigging_weight = st.number_input("Rigging / Accessories Weight (kg)", min_value=0.0, value=0.0, step=50.0, key="pms_rigging_weight")
+
         with c2:
             ms_length = st.number_input("Length (m)", min_value=0.0, value=0.0, step=0.1, key="pms_length")
             ms_width = st.number_input("Width (m)", min_value=0.0, value=0.0, step=0.1, key="pms_width")
             ms_height = st.number_input("Height (m)", min_value=0.0, value=0.0, step=0.1, key="pms_height")
-            ms_cg = st.text_input("Centre of Gravity", "Estimated at geometric centre unless manufacturer information states otherwise", key="pms_cg")
+            ms_cg = st.text_input(
+                "Centre of Gravity",
+                "Estimated at geometric centre unless manufacturer information states otherwise",
+                key="pms_cg"
+            )
+
         with c3:
             ms_lifting_points = st.text_area("Lifting Points / Support Points", height=95, key="pms_lifting_points")
-            ms_sling_angle = st.number_input("Sling Angle for Drawing (degrees)", min_value=30.0, max_value=90.0, value=60.0, step=5.0, key="pms_sling_angle")
-            ms_lift_class = st.selectbox("Lift Classification", ["Routine Lift", "Non-Routine Lift", "To Be Confirmed"], key="pms_lift_class")
-            ms_lift_reason = st.text_area("Classification Reason / Notes", height=75, key="pms_lift_reason")
+
+            show_lifting_geometry = ms_operation_type in [
+                "Ground Floor - Crane / Lorry Crane Hoisting",
+                "Upper Floor / Roof Hoisting",
+                "Loading / Unloading Only",
+                "Custom",
+            ]
+            if show_lifting_geometry:
+                ms_sling_angle = st.number_input(
+                    "Sling Angle for Rigging Drawing (degrees)",
+                    min_value=30.0,
+                    max_value=90.0,
+                    value=60.0,
+                    step=5.0,
+                    key="pms_sling_angle"
+                )
+                lift_options = ["Routine Lift", "Non-Routine Lift", "To Be Confirmed"]
+            else:
+                ms_sling_angle = 60.0
+                lift_options = ["Not Applicable / Machinery Moving Only", "Routine Lift", "Non-Routine Lift", "To Be Confirmed"]
+
+            ms_lift_class = st.selectbox("Lift Classification", lift_options, key="pms_lift_class")
+            ms_lift_reason = st.text_area("Classification Reason / Notes (optional)", height=75, key="pms_lift_reason")
 
         total_lifted = float(ms_load_weight) + float(ms_rigging_weight)
         st.metric("Total Lifted Weight", f"{total_lifted:,.0f} kg")
 
-    with st.expander("3. Equipment Selection & Crane Data", expanded=True):
+    # --------------------------------------------------
+    # 3. EQUIPMENT SELECTION
+    # --------------------------------------------------
+    with st.expander("3. Equipment Selection", expanded=True):
         st.markdown("**Select only equipment actually intended for this job.**")
         e1, e2, e3, e4 = st.columns(4)
         equipment = []
-        with e1:
-            if st.checkbox("Lorry Loader / Lorry Crane", key="pms_eq_lorry_crane"):
-                equipment.append("Lorry loader / lorry crane")
-            if st.checkbox("Mobile Crane", key="pms_eq_mobile_crane"):
-                equipment.append("Mobile crane")
-            if st.checkbox("Forklift", key="pms_eq_forklift"):
-                equipment.append("Forklift")
-        with e2:
-            if st.checkbox("Hydraulic Jacks", value=True, key="pms_eq_jacks"):
-                equipment.append("Hydraulic jacks")
-            if st.checkbox("Machine Skates / Rollers", value=True, key="pms_eq_skates"):
-                equipment.append("Machine skates / rollers")
-            if st.checkbox("Pallet Truck", key="pms_eq_pallet"):
-                equipment.append("Pallet truck")
-        with e3:
-            if st.checkbox("Chain Block / Lever Block", key="pms_eq_chain"):
-                equipment.append("Chain block / lever block")
-            if st.checkbox("Spreader Beam", key="pms_eq_spreader"):
-                equipment.append("Spreader beam")
-            if st.checkbox("Steel Plates", key="pms_eq_steel_plate"):
-                equipment.append("Steel plates for floor / ground protection")
-        with e4:
-            if st.checkbox("Plywood / Timber Protection", value=True, key="pms_eq_plywood"):
-                equipment.append("Plywood / timber floor protection")
-            if st.checkbox("Barricades / Cones", value=True, key="pms_eq_barricade"):
-                equipment.append("Barricades, warning signs and traffic cones")
-            if st.checkbox("Tag Lines", value=True, key="pms_eq_tagline"):
-                equipment.append("Tag lines")
 
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            ms_crane_model = st.text_input("Crane / Lorry Loader Make & Model", key="pms_crane_model")
-            ms_crane_lm = st.text_input("LM / LE Registration No.", key="pms_crane_lm")
-            ms_crane_max_capacity = st.text_input("Maximum Crane Capacity", key="pms_crane_max_capacity", placeholder="Example: 110 Ton")
-        with c2:
-            ms_boom_length = st.number_input("Boom / Jib Length (m)", min_value=0.0, value=0.0, step=0.5, key="pms_boom_length")
-            ms_operating_radius = st.number_input("Operating Radius (m)", min_value=0.0, value=0.0, step=0.1, key="pms_radius")
-            ms_swl_radius = st.number_input("SWL at Operating Radius (kg)", min_value=0.0, value=0.0, step=100.0, key="pms_swl_radius")
-        with c3:
-            ms_forklift_details = st.text_input("Forklift Details / Capacity", key="pms_forklift_details")
-            ms_lifting_gear = st.text_area(
-                "Lifting Gear / Moving Accessories",
-                value="Certified webbing / wire rope slings, shackles and suitable rigging accessories",
-                height=95,
-                key="pms_lifting_gear"
+        default_lorry_crane = ms_operation_type == "Ground Floor - Crane / Lorry Crane Hoisting"
+        default_forklift = ms_operation_type == "Indoor Machinery Shifting"
+        default_jacks = ms_operation_type in ["Ground Floor - Unload / Shift / Position", "Indoor Machinery Shifting"]
+        default_skates = ms_operation_type in ["Ground Floor - Unload / Shift / Position", "Indoor Machinery Shifting"]
+        default_plywood = ms_operation_type in ["Ground Floor - Unload / Shift / Position", "Indoor Machinery Shifting"]
+
+        op_key = re.sub(r"[^A-Za-z0-9]+", "_", ms_operation_type).strip("_").lower()
+
+        with e1:
+            eq_lorry_crane = st.checkbox(
+                "Lorry Loader / Lorry Crane",
+                value=default_lorry_crane,
+                key=f"pms_eq_lorry_crane_{op_key}"
+            )
+            eq_mobile_crane = st.checkbox("Mobile Crane", key=f"pms_eq_mobile_crane_{op_key}")
+            eq_forklift = st.checkbox(
+                "Forklift",
+                value=default_forklift,
+                key=f"pms_eq_forklift_{op_key}"
             )
 
-        utilisation = (total_lifted / ms_swl_radius * 100) if ms_swl_radius > 0 else 0.0
-        m1, m2, m3 = st.columns(3)
-        m1.metric("Total Lifted", f"{total_lifted:,.0f} kg")
-        m2.metric("SWL @ Radius", f"{ms_swl_radius:,.0f} kg" if ms_swl_radius else "Not entered")
-        m3.metric("Crane Utilisation", f"{utilisation:.1f}%" if ms_swl_radius else "Not calculated")
-        if utilisation > 100:
-            st.error("Entered total lifted weight exceeds the entered SWL at operating radius. Do not proceed on these figures.")
-        elif utilisation > 75:
-            st.warning("Entered utilisation is above 75%. Review lift classification and client/site requirements carefully.")
+        with e2:
+            eq_jacks = st.checkbox(
+                "Hydraulic Jacks",
+                value=default_jacks,
+                key=f"pms_eq_jacks_{op_key}"
+            )
+            eq_skates = st.checkbox(
+                "Machine Skates / Rollers",
+                value=default_skates,
+                key=f"pms_eq_skates_{op_key}"
+            )
+            eq_pallet = st.checkbox("Pallet Truck", key=f"pms_eq_pallet_{op_key}")
 
-    with st.expander("4. Site Survey / Access / Drawing Dimensions", expanded=True):
+        with e3:
+            eq_chain = st.checkbox("Chain Block / Lever Block", key=f"pms_eq_chain_{op_key}")
+            eq_spreader = st.checkbox("Spreader Beam", key=f"pms_eq_spreader_{op_key}")
+            eq_steel = st.checkbox("Steel Plates", key=f"pms_eq_steel_plate_{op_key}")
+
+        with e4:
+            eq_plywood = st.checkbox(
+                "Plywood / Timber Protection",
+                value=default_plywood,
+                key=f"pms_eq_plywood_{op_key}"
+            )
+            eq_barricade = st.checkbox(
+                "Barricades / Cones",
+                value=True,
+                key=f"pms_eq_barricade_{op_key}"
+            )
+            eq_tagline = st.checkbox(
+                "Tag Lines",
+                value=default_lorry_crane or ms_operation_type == "Upper Floor / Roof Hoisting",
+                key=f"pms_eq_tagline_{op_key}"
+            )
+
+        if eq_lorry_crane:
+            equipment.append("Lorry loader / lorry crane")
+        if eq_mobile_crane:
+            equipment.append("Mobile crane")
+        if eq_forklift:
+            equipment.append("Forklift")
+        if eq_jacks:
+            equipment.append("Hydraulic jacks")
+        if eq_skates:
+            equipment.append("Machine skates / rollers")
+        if eq_pallet:
+            equipment.append("Pallet truck")
+        if eq_chain:
+            equipment.append("Chain block / lever block")
+        if eq_spreader:
+            equipment.append("Spreader beam")
+        if eq_steel:
+            equipment.append("Steel plates for floor / ground protection")
+        if eq_plywood:
+            equipment.append("Plywood / timber floor protection")
+        if eq_barricade:
+            equipment.append("Barricades, warning signs and traffic cones")
+        if eq_tagline:
+            equipment.append("Tag lines")
+
+        has_crane = eq_lorry_crane or eq_mobile_crane
+
+        # Defaults so hidden fields remain safe for generation.
+        ms_crane_model = ""
+        ms_crane_lm = ""
+        ms_crane_max_capacity = ""
+        ms_boom_length = 0.0
+        ms_operating_radius = 0.0
+        ms_swl_radius = 0.0
+        ms_forklift_details = ""
+        utilisation = 0.0
+
+        if has_crane:
+            st.markdown("#### Crane / Lorry Loader Data")
+            c1, c2 = st.columns(2)
+            with c1:
+                ms_crane_model = st.text_input("Crane / Lorry Loader Make & Model", key=f"pms_crane_model_{op_key}")
+                ms_crane_lm = st.text_input("LM / LE Registration No.", key=f"pms_crane_lm_{op_key}")
+                ms_crane_max_capacity = st.text_input(
+                    "Maximum Crane Capacity",
+                    key=f"pms_crane_max_capacity_{op_key}",
+                    placeholder="Example: 110 Ton"
+                )
+            with c2:
+                ms_boom_length = st.number_input(
+                    "Boom / Jib Length (m)",
+                    min_value=0.0,
+                    value=0.0,
+                    step=0.5,
+                    key=f"pms_boom_length_{op_key}"
+                )
+                ms_operating_radius = st.number_input(
+                    "Operating Radius (m)",
+                    min_value=0.0,
+                    value=0.0,
+                    step=0.1,
+                    key=f"pms_radius_{op_key}"
+                )
+                ms_swl_radius = st.number_input(
+                    "SWL at Operating Radius (kg)",
+                    min_value=0.0,
+                    value=0.0,
+                    step=100.0,
+                    key=f"pms_swl_radius_{op_key}"
+                )
+
+            utilisation = (total_lifted / ms_swl_radius * 100) if ms_swl_radius > 0 else 0.0
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total Lifted", f"{total_lifted:,.0f} kg")
+            m2.metric("SWL @ Radius", f"{ms_swl_radius:,.0f} kg" if ms_swl_radius else "Not entered")
+            m3.metric("Crane Utilisation", f"{utilisation:.1f}%" if ms_swl_radius else "Not calculated")
+
+            if utilisation > 100:
+                st.error("Entered total lifted weight exceeds the entered SWL at operating radius. Do not proceed on these figures.")
+            elif utilisation > 75:
+                st.warning("Entered utilisation is above 75%. Review lift classification and client/site requirements carefully.")
+        else:
+            st.caption("Crane data is hidden because no crane / lorry loader is selected.")
+
+        if eq_forklift:
+            ms_forklift_details = st.text_input(
+                "Forklift Details / Capacity",
+                key=f"pms_forklift_details_{op_key}",
+                placeholder="Example: 10 Ton diesel forklift"
+            )
+
+        ms_lifting_gear = st.text_area(
+            "Lifting Gear / Moving Accessories",
+            value=(
+                "Certified webbing / wire rope slings, shackles and suitable rigging accessories"
+                if has_crane
+                else "Suitable jacks, skates, rollers, pallet truck accessories and support materials as selected above"
+            ),
+            height=80,
+            key=f"pms_lifting_gear_{op_key}"
+        )
+
+    # --------------------------------------------------
+    # 4. SMART SITE SURVEY
+    # --------------------------------------------------
+    with st.expander("4. Site Survey / Access / Drawing Details", expanded=True):
+        st.caption("Only information relevant to the selected operation is shown.")
+
+        s1, s2 = st.columns(2)
+        with s1:
+            ground_choice = st.selectbox(
+                "Ground / Floor Condition",
+                [
+                    "Firm level concrete floor",
+                    "Firm level external hardstand",
+                    "Asphalt / road surface",
+                    "Steel plate protected floor",
+                    "Uneven / special ground - additional control required",
+                    "Other",
+                ],
+                key=f"pms_ground_choice_{op_key}"
+            )
+        with s2:
+            access_choice = st.selectbox(
+                "Site Access",
+                [
+                    "Clear and unrestricted",
+                    "Restricted access",
+                    "Confined working area",
+                    "Shared vehicle / pedestrian area",
+                    "Other",
+                ],
+                key=f"pms_access_choice_{op_key}"
+            )
+
+        ms_ground = ground_choice
+        ms_access = access_choice
+
+        if ground_choice in ["Uneven / special ground - additional control required", "Other"]:
+            ground_note = st.text_input(
+                "Ground / Floor Details",
+                placeholder="Example: sloping driveway, steel plate required over drain, raised floor loading limit...",
+                key=f"pms_ground_note_{op_key}"
+            )
+            if ground_note.strip():
+                ms_ground = f"{ground_choice}: {ground_note.strip()}"
+
+        if access_choice != "Clear and unrestricted":
+            access_note = st.text_input(
+                "Access Details",
+                placeholder="Example: narrow turning area, shared driveway, restricted headroom...",
+                key=f"pms_access_note_{op_key}"
+            )
+            if access_note.strip():
+                ms_access = f"{access_choice}: {access_note.strip()}"
+
+        # Safe defaults. These are company controls, not something the user must repeatedly type.
+        ms_obstacles = (
+            "Clear obstructions in the working area and intended movement / lifting zone. "
+            "Barricade or demarcate the operation area to prevent unauthorised entry."
+        )
+        ms_environment = (
+            "Suspend lifting work during lightning, thunderstorms, heavy rain or any condition "
+            "that makes the operation unsafe."
+        )
+        ms_special_site_notes = ""
+        ms_building_height = 0.0
+        ms_crane_distance = 0.0
+        ms_landing_depth = 0.0
+        ms_door_width = 0.0
+        ms_door_height = 0.0
+        ms_route_start = ""
+        ms_route_final = ""
+        ms_route_notes = ""
+        ms_travel_distance = 0.0
+        ms_custom_operation_details = ""
+
+        if ms_operation_type == "Ground Floor - Unload / Shift / Position":
+            st.markdown("#### Ground-Level Machinery Movement")
+            a, b = st.columns(2)
+            with a:
+                ms_route_start = st.text_input(
+                    "Starting Position",
+                    "Unloading / designated landing point",
+                    key=f"pms_ground_start_{op_key}"
+                )
+            with b:
+                ms_route_final = st.text_input(
+                    "Final Machine Position",
+                    "Designated installation position",
+                    key=f"pms_ground_final_{op_key}"
+                )
+            ms_travel_distance = st.number_input(
+                "Approximate Travel Distance (m) — optional",
+                min_value=0.0,
+                value=0.0,
+                step=0.5,
+                key=f"pms_ground_travel_{op_key}"
+            )
+            ms_route_notes = st.text_area(
+                "Special Route Information — optional",
+                height=80,
+                placeholder="Example: enter factory, turn right at Line 2, position beside existing machine.",
+                key=f"pms_ground_route_{op_key}"
+            )
+
+        elif ms_operation_type == "Ground Floor - Crane / Lorry Crane Hoisting":
+            st.markdown("#### Ground-Level Hoisting Arrangement")
+            ms_route_start = st.text_input(
+                "Pick-Up Position",
+                "Transport vehicle / designated pick-up point",
+                key=f"pms_ground_crane_start_{op_key}"
+            )
+            ms_route_final = st.text_input(
+                "Landing / Final Position",
+                "Ground-level designated landing position",
+                key=f"pms_ground_crane_final_{op_key}"
+            )
+            ms_route_notes = st.text_area(
+                "Special Hoisting Notes — optional",
+                height=80,
+                placeholder="Example: hoist machine from lorry and land beside factory entrance.",
+                key=f"pms_ground_crane_notes_{op_key}"
+            )
+            st.success("Building height, landing depth and door dimensions are not required for this ground-level operation.")
+
+        elif ms_operation_type == "Upper Floor / Roof Hoisting":
+            st.markdown("#### Elevated / Building Hoisting Dimensions")
+            a, b, c = st.columns(3)
+            with a:
+                ms_building_height = st.number_input(
+                    "Hoisting / Building Height (m)",
+                    min_value=0.0,
+                    value=0.0,
+                    step=0.5,
+                    key=f"pms_upper_height_{op_key}"
+                )
+            with b:
+                ms_crane_distance = st.number_input(
+                    "Crane to Building Distance (m)",
+                    min_value=0.0,
+                    value=0.0,
+                    step=0.5,
+                    key=f"pms_upper_crane_distance_{op_key}"
+                )
+            with c:
+                ms_landing_depth = st.number_input(
+                    "Landing Depth into Building / Platform (m)",
+                    min_value=0.0,
+                    value=0.0,
+                    step=0.5,
+                    key=f"pms_upper_landing_depth_{op_key}"
+                )
+
+            load_through_opening = st.checkbox(
+                "Load passes through a door / opening",
+                value=False,
+                key=f"pms_upper_opening_{op_key}"
+            )
+            if load_through_opening:
+                d1, d2 = st.columns(2)
+                with d1:
+                    ms_door_width = st.number_input(
+                        "Opening Width (m)",
+                        min_value=0.0,
+                        value=0.0,
+                        step=0.1,
+                        key=f"pms_upper_door_width_{op_key}"
+                    )
+                with d2:
+                    ms_door_height = st.number_input(
+                        "Opening Height (m)",
+                        min_value=0.0,
+                        value=0.0,
+                        step=0.1,
+                        key=f"pms_upper_door_height_{op_key}"
+                    )
+
+            ms_route_final = st.text_input(
+                "Landing Position",
+                placeholder="Example: Level 3 loading bay / rooftop / external platform",
+                key=f"pms_upper_final_{op_key}"
+            )
+            ms_route_notes = st.text_area(
+                "Special Elevated Hoisting Notes — optional",
+                height=80,
+                key=f"pms_upper_notes_{op_key}"
+            )
+
+        elif ms_operation_type == "Indoor Machinery Shifting":
+            st.markdown("#### Indoor Machinery Route")
+            opening_relevant = st.checkbox(
+                "Machine must pass through a door / roller shutter / opening",
+                value=True,
+                key=f"pms_indoor_opening_{op_key}"
+            )
+            if opening_relevant:
+                d1, d2 = st.columns(2)
+                with d1:
+                    ms_door_width = st.number_input(
+                        "Minimum Opening Width (m)",
+                        min_value=0.0,
+                        value=0.0,
+                        step=0.1,
+                        key=f"pms_indoor_door_width_{op_key}"
+                    )
+                with d2:
+                    ms_door_height = st.number_input(
+                        "Minimum Opening Height (m)",
+                        min_value=0.0,
+                        value=0.0,
+                        step=0.1,
+                        key=f"pms_indoor_door_height_{op_key}"
+                    )
+
+            a, b = st.columns(2)
+            with a:
+                ms_route_start = st.text_input("Starting Position", key=f"pms_indoor_start_{op_key}")
+            with b:
+                ms_route_final = st.text_input("Final Machine Position", key=f"pms_indoor_final_{op_key}")
+
+            ms_travel_distance = st.number_input(
+                "Approximate Machinery Travel Distance (m) — optional",
+                min_value=0.0,
+                value=0.0,
+                step=0.5,
+                key=f"pms_indoor_travel_{op_key}"
+            )
+            ms_route_notes = st.text_area(
+                "Movement Route — optional",
+                height=80,
+                placeholder="Example: enter Roller Shutter 2, travel straight 18 m, turn left and position beside Line 3.",
+                key=f"pms_indoor_route_{op_key}"
+            )
+
+        elif ms_operation_type == "Loading / Unloading Only":
+            st.markdown("#### Loading / Unloading Arrangement")
+            ms_route_start = st.text_input(
+                "Pick-Up / Starting Position",
+                "Transport vehicle / designated loading area",
+                key=f"pms_load_start_{op_key}"
+            )
+            ms_route_final = st.text_input(
+                "Landing / Loading Position",
+                "Designated loading / unloading area",
+                key=f"pms_load_final_{op_key}"
+            )
+            ms_route_notes = st.text_area(
+                "Special Loading / Unloading Notes — optional",
+                height=80,
+                key=f"pms_load_notes_{op_key}"
+            )
+
+        else:
+            st.markdown("#### Custom Arrangement")
+            ms_custom_operation_details = st.text_area(
+                "Describe the Site / Movement Arrangement",
+                height=130,
+                placeholder=(
+                    "Describe the unusual job arrangement. Example: lower machine into pit, transfer with chain block, "
+                    "temporary landing on platform, tandem equipment arrangement, etc."
+                ),
+                key=f"pms_custom_operation_{op_key}"
+            )
+            ms_route_start = st.text_input("Starting / Pick-Up Position — optional", key=f"pms_custom_start_{op_key}")
+            ms_route_final = st.text_input("Final / Landing Position — optional", key=f"pms_custom_final_{op_key}")
+
+        with st.expander("Additional Site Conditions — only change if necessary", expanded=False):
+            ms_obstacles = st.text_area(
+                "Obstacles / Interfaces",
+                value=ms_obstacles,
+                height=75,
+                key=f"pms_obstacles_{op_key}"
+            )
+            ms_environment = st.text_area(
+                "Environmental Controls",
+                value=ms_environment,
+                height=75,
+                key=f"pms_environment_{op_key}"
+            )
+            ms_special_site_notes = st.text_area(
+                "Other Site Notes",
+                placeholder="Optional — leave blank if none.",
+                height=75,
+                key=f"pms_special_site_notes_{op_key}"
+            )
+
+    # --------------------------------------------------
+    # 5. LIFTING / MOVING TEAM
+    # --------------------------------------------------
+    with st.expander("5. Lifting / Moving Team", expanded=False):
         c1, c2 = st.columns(2)
         with c1:
-            ms_ground = st.text_area("Ground / Floor Condition", value="Firm, level and suitable for the intended equipment. Verify actual load-bearing condition before setup.", key="pms_ground")
-            ms_access = st.text_area("Access Route", value="Confirm access route, turning space, headroom and final machine position before mobilisation.", key="pms_access")
-            ms_obstacles = st.text_area("Obstacles / Interfaces", value="Clear obstructions in the working area and travel route. Barricade the operation area to prevent unauthorised entry.", key="pms_obstacles")
-            ms_environment = st.text_area("Environment", value="Suspend lifting work during lightning, thunderstorms, heavy rain or any condition that makes the operation unsafe.", key="pms_environment")
+            ms_lifting_supervisor = st.text_input(
+                "Lifting / Site Supervisor",
+                "Ibrahim / Zahari / Zaharin / Wong Yen Siong",
+                key="pms_lifting_supervisor"
+            )
+            ms_operator = st.text_input(
+                "Equipment Operator",
+                "Lim Poh Soon / Norhalim / Lim Poh Thian / Ngaimin / Azmi",
+                key="pms_operator"
+            )
         with c2:
-            d1, d2 = st.columns(2)
-            with d1:
-                ms_building_height = st.number_input("Building / Lift Height (m)", min_value=0.0, value=0.0, step=0.5, key="pms_building_height")
-                ms_crane_distance = st.number_input("Crane to Building Distance (m)", min_value=0.0, value=0.0, step=0.1, key="pms_crane_distance")
-                ms_door_width = st.number_input("Door Width (m)", min_value=0.0, value=0.0, step=0.1, key="pms_door_width")
-            with d2:
-                ms_landing_depth = st.number_input("Landing Depth into Building (m)", min_value=0.0, value=0.0, step=0.1, key="pms_landing_depth")
-                ms_door_height = st.number_input("Door Height (m)", min_value=0.0, value=0.0, step=0.1, key="pms_door_height")
-            ms_route_start = st.text_input("Movement Start Position", "Unloading / landing point", key="pms_route_start")
-            ms_route_final = st.text_input("Final Machine Position", "Designated installation position", key="pms_route_final")
-            ms_route_notes = st.text_area("Movement Route Notes", height=90, key="pms_route_notes", placeholder="Example: enter through Roller Shutter 2, turn left, travel 18 m, position beside Line 3")
-
-    with st.expander("5. Lifting Team", expanded=True):
-        c1, c2 = st.columns(2)
-        with c1:
-            ms_lifting_supervisor = st.text_input("Lifting Supervisor", "Ibrahim / Zahari / Zaharin / Wong Yen Siong", key="pms_lifting_supervisor")
-            ms_operator = st.text_input("Equipment Operator", "Lim Poh Soon / Norhalim / Lim Poh Thian / Ngaimin / Azmi", key="pms_operator")
-        with c2:
-            ms_rigger = st.text_input("Rigger / Signalman", "Rizal / Hanifah / Aziz / Jamari / Ahmad / Rahman / Malik", key="pms_rigger")
+            ms_rigger = st.text_input(
+                "Rigger / Signalman",
+                "Rizal / Hanifah / Aziz / Jamari / Ahmad / Rahman / Malik",
+                key="pms_rigger"
+            )
             ms_lifting_crew = st.text_area(
                 "Crew / Responsibility Notes",
-                value="MOM certified / qualified lifting supervisor, rigger, signalman and equipment operator shall be deployed according to the actual lifting equipment and project requirements.",
+                value=(
+                    "Qualified / competent lifting supervisor or site supervisor, rigger, signalman and equipment "
+                    "operator shall be deployed according to the actual equipment and project requirements."
+                ),
                 height=80,
                 key="pms_lifting_crew"
             )
 
-    with st.expander("6. Site Photos, Site Plan & Automatic Drawings", expanded=True):
+    # --------------------------------------------------
+    # 6. PHOTOS / DRAWINGS
+    # --------------------------------------------------
+    with st.expander("6. Site Photos, Site Plan & Drawings", expanded=True):
         site_photos = st.file_uploader(
             "Upload Site Photos",
             type=["png", "jpg", "jpeg"],
@@ -2355,22 +3000,52 @@ if page == "📄 Method Statement":
         )
         photo_caption_text = st.text_area(
             "Photo Captions — one line per uploaded photo (optional)",
-            height=100,
+            height=90,
             key="pms_photo_captions",
-            placeholder="Photo 1: Lorry crane set-up area\nPhoto 2: Roller shutter entrance\nPhoto 3: Final machine position"
+            placeholder="Photo 1: Lorry crane set-up area\nPhoto 2: Access route\nPhoto 3: Final machine position"
         )
         site_plan_file = st.file_uploader(
             "Upload Site Plan / Customer Drawing (optional)",
             type=["pdf", "png", "jpg", "jpeg"],
             key="pms_site_plan"
         )
-        st.markdown("**Automatic drawings to include**")
-        d1, d2, d3, d4 = st.columns(4)
-        draw_top = d1.checkbox("Top View", value=True, key="pms_draw_top")
-        draw_side = d2.checkbox("Side Elevation", value=True, key="pms_draw_side")
-        draw_route = d3.checkbox("Movement Route", value=True, key="pms_draw_route")
-        draw_rigging = d4.checkbox("Rigging Sketch", value=True, key="pms_draw_rigging")
 
+        drawing_options = ["Top View", "Side Elevation", "Movement Route", "Rigging Sketch"]
+
+        if ms_operation_type == "Ground Floor - Unload / Shift / Position":
+            recommended_drawings = ["Movement Route"]
+        elif ms_operation_type == "Ground Floor - Crane / Lorry Crane Hoisting":
+            recommended_drawings = ["Top View", "Rigging Sketch"] if has_crane else []
+        elif ms_operation_type == "Upper Floor / Roof Hoisting":
+            recommended_drawings = ["Top View", "Side Elevation", "Rigging Sketch"]
+        elif ms_operation_type == "Indoor Machinery Shifting":
+            recommended_drawings = ["Movement Route"]
+        elif ms_operation_type == "Loading / Unloading Only":
+            recommended_drawings = ["Top View", "Rigging Sketch"] if has_crane else ["Movement Route"]
+        else:
+            recommended_drawings = ["Rigging Sketch"] if has_crane else []
+
+        st.markdown("**Drawings to include**")
+        selected_drawings = st.multiselect(
+            "Recommended automatically from the selected operation. Change only if needed.",
+            drawing_options,
+            default=recommended_drawings,
+            key=f"pms_drawings_{op_key}"
+        )
+
+        draw_top = "Top View" in selected_drawings
+        draw_side = "Side Elevation" in selected_drawings
+        draw_route = "Movement Route" in selected_drawings
+        draw_rigging = "Rigging Sketch" in selected_drawings
+
+        if ms_operation_type == "Ground Floor - Crane / Lorry Crane Hoisting":
+            st.caption("Ground-floor Top View is generated without a building. It shows crane, pick-up load, landing position and exclusion zone.")
+        elif ms_operation_type == "Upper Floor / Roof Hoisting":
+            st.caption("Upper-floor work can generate the building Top View and Side Elevation using the entered height / distance dimensions.")
+
+    # --------------------------------------------------
+    # 7. APPENDICES
+    # --------------------------------------------------
     gear_items = []
     worker_items = []
     github_ready = bool(github_settings().get("token") and github_settings().get("repo"))
@@ -2388,6 +3063,7 @@ if page == "📄 Method Statement":
 
         gear_by_name = {i.get("name", ""): i for i in gear_items}
         worker_by_name = {i.get("name", ""): i for i in worker_items}
+
         selected_gear_names = st.multiselect(
             "Lifting Gear / Crane Certificates",
             list(gear_by_name.keys()),
@@ -2409,9 +3085,14 @@ if page == "📄 Method Statement":
             value=True,
             key="pms_embed_full_pdf"
         )
-        st.caption("For PDF pages to be embedded, add `PyMuPDF` to requirements.txt. If it is missing, the MOS still generates but only lists the PDF attachment.")
+        st.caption("For PDF pages to be embedded, PyMuPDF must be installed. Your current requirements already include it.")
 
-    generate_ms = st.button("🏗️ Generate Professional MOS Package", key="generate_professional_ms", type="primary")
+    generate_ms = st.button(
+        "🏗️ Generate Professional MOS Package",
+        key="generate_professional_ms",
+        type="primary",
+        use_container_width=True
+    )
 
     if generate_ms:
         required = {
@@ -2422,17 +3103,22 @@ if page == "📄 Method Statement":
             "Machine / Load Name": ms_machine_name,
         }
         missing_fields = [label for label, value in required.items() if not str(value).strip()]
+
+        if has_crane and ms_swl_radius <= 0:
+            st.warning("Crane / lorry loader is selected but SWL at operating radius has not been entered.")
+
         if missing_fields:
             st.error("Please complete: " + ", ".join(missing_fields))
         else:
             try:
-                with st.spinner("Generating project-specific method, drawings and Word package..."):
+                with st.spinner("Generating project-specific method, relevant drawings and Word package..."):
                     data = {
                         "customer": ms_customer,
                         "project_name": ms_project_name,
                         "location": ms_location,
                         "description": ms_description,
                         "process": ms_process,
+                        "operation_type": ms_operation_type,
                         "operation_date": str(ms_date_input),
                         "operation_time": ms_operation_time,
                         "prepared_by": ms_prepared_by,
@@ -2440,6 +3126,7 @@ if page == "📄 Method Statement":
                         "approved_by": ms_approved_by,
                         "last_review": str(ms_last_review),
                         "next_review": str(ms_next_review),
+
                         "machine_name": ms_machine_name,
                         "load_type": ms_load_type,
                         "load_weight_kg": float(ms_load_weight),
@@ -2453,6 +3140,7 @@ if page == "📄 Method Statement":
                         "sling_angle": float(ms_sling_angle),
                         "lift_classification": ms_lift_class,
                         "lift_reason": ms_lift_reason,
+
                         "equipment": equipment,
                         "crane_model": ms_crane_model,
                         "crane_lm": ms_crane_lm,
@@ -2463,22 +3151,28 @@ if page == "📄 Method Statement":
                         "utilisation_pct": float(utilisation),
                         "forklift_details": ms_forklift_details,
                         "lifting_gear": ms_lifting_gear,
+
                         "ground_condition": ms_ground,
                         "access_route": ms_access,
                         "obstacles": ms_obstacles,
                         "environment": ms_environment,
+                        "special_site_notes": ms_special_site_notes,
                         "building_height": float(ms_building_height),
                         "crane_distance": float(ms_crane_distance),
                         "landing_depth": float(ms_landing_depth),
                         "door_width": float(ms_door_width),
                         "door_height": float(ms_door_height),
+                        "travel_distance_m": float(ms_travel_distance),
                         "route_start": ms_route_start,
                         "route_final": ms_route_final,
                         "route_notes": ms_route_notes,
+                        "custom_operation_details": ms_custom_operation_details,
+
                         "lifting_supervisor": ms_lifting_supervisor,
                         "operator": ms_operator,
                         "rigger": ms_rigger,
                         "lifting_crew": ms_lifting_crew,
+
                         "draw_top": draw_top,
                         "draw_side": draw_side,
                         "draw_route": draw_route,
@@ -2509,6 +3203,7 @@ if page == "📄 Method Statement":
 
                     safe_project = re.sub(r"[^A-Za-z0-9_-]+", "_", ms_project_name.strip())[:50] or "Project"
                     st.success("Professional Method Statement package generated.")
+
                     st.download_button(
                         "⬇️ Download Professional MOS (.docx)",
                         buffer,
