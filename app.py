@@ -3,6 +3,7 @@ import json
 import base64
 import hmac
 import re
+from copy import deepcopy
 from urllib.parse import quote
 from io import BytesIO
 from datetime import date, datetime, timedelta
@@ -21,11 +22,13 @@ try:
     from pptx import Presentation
     from pptx.util import Pt as PPTXPt
     from pptx.enum.shapes import MSO_SHAPE_TYPE
+    from pptx.dml.color import RGBColor
     PPTX_AVAILABLE = True
 except Exception:
     Presentation = None
     PPTXPt = None
     MSO_SHAPE_TYPE = None
+    RGBColor = None
     PPTX_AVAILABLE = False
 
 # =====================
@@ -1185,56 +1188,391 @@ def mos_pro_find_work_method_shape(prs):
     return None, None
 
 
-def mos_pro_write_work_method(shape, work_method_text):
-    """Replace only the existing work-method textbox, leaving the slide header/footer untouched."""
+def mos_pro_find_work_method_shape_on_slide(slide):
+    """Locate the work-method textbox on a specific slide."""
+    for shape in slide.shapes:
+        if getattr(shape, "has_text_frame", False):
+            txt = shape.text or ""
+            if "Work Method Statement for Lifting Operation" in txt:
+                return shape
+    return None
+
+
+def mos_pro_duplicate_slide_after(prs, source_index):
+    """
+    Duplicate one complete MOS slide and place the copy immediately after it.
+
+    This preserves the EWMT header, footer, logo, project-information table
+    and page design. Image and hyperlink relationships are remapped so the
+    duplicated slide remains valid.
+    """
+    source_slide = prs.slides[source_index]
+    new_slide = prs.slides.add_slide(source_slide.slide_layout)
+
+    # Remove any placeholders automatically created by the selected layout.
+    for shape in list(new_slide.shapes):
+        element = shape.element
+        element.getparent().remove(element)
+
+    rel_ns = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    relationship_map = {}
+
+    # Create equivalent relationships on the new slide, excluding slide layout.
+    for old_rid, rel in source_slide.part.rels.items():
+        if rel.reltype.endswith("/slideLayout"):
+            continue
+
+        relationship_map[old_rid] = new_slide.part.rels._add_relationship(
+            rel.reltype,
+            rel._target,
+            rel.is_external,
+        )
+
+    # Deep-copy every shape and remap relationship IDs used by images/hyperlinks.
+    for shape in source_slide.shapes:
+        new_element = deepcopy(shape.element)
+
+        for node in new_element.iter():
+            for attr_name, attr_value in list(node.attrib.items()):
+                if (
+                    attr_name.startswith("{" + rel_ns + "}")
+                    and attr_value in relationship_map
+                ):
+                    node.set(attr_name, relationship_map[attr_value])
+
+        new_slide.shapes._spTree.insert_element_before(
+            new_element,
+            "p:extLst"
+        )
+
+    # New slides are appended to the end by python-pptx.
+    # Move this one so it sits directly after the original work-method page.
+    slide_id_list = prs.slides._sldIdLst
+    new_slide_id = slide_id_list[-1]
+    slide_id_list.remove(new_slide_id)
+    slide_id_list.insert(source_index + 1, new_slide_id)
+
+    return new_slide
+
+
+def mos_pro_get_slide_number_text(slide):
+    """Read the existing MOS page number from its slide-number placeholder."""
+    for shape in slide.shapes:
+        if "Slide Number Placeholder" in getattr(shape, "name", ""):
+            txt = (shape.text or "").strip()
+            if txt:
+                return txt
+
+    # Fallback: look for a small textbox containing only a page number.
+    for shape in slide.shapes:
+        if getattr(shape, "has_text_frame", False):
+            txt = (shape.text or "").strip()
+            if re.fullmatch(r"\d+[A-Za-z]?", txt):
+                return txt
+
+    return ""
+
+
+def mos_pro_set_slide_number_text(slide, value):
+    """
+    Set only the duplicated page's footer number.
+
+    The continuation page uses e.g. 15A / 26A so the original master page
+    numbering after it does not need to be changed.
+    """
+    for shape in slide.shapes:
+        if "Slide Number Placeholder" in getattr(shape, "name", ""):
+            if getattr(shape, "has_text_frame", False):
+                shape.text_frame.clear()
+                p = shape.text_frame.paragraphs[0]
+                p.text = str(value)
+                return True
+
+    return False
+
+
+def mos_pro_set_run_font(run, size=10.0, bold=False, color=None):
+    """Apply clean MOS PRO body formatting."""
+    run.font.name = "Arial"
+    run.font.size = PPTXPt(size)
+    run.font.bold = bold
+
+    if color is not None and RGBColor is not None:
+        run.font.color.rgb = RGBColor(*color)
+
+
+def mos_pro_add_paragraph(
+    tf,
+    text,
+    size=10.0,
+    bold=False,
+    color=None,
+    space_before=0,
+    space_after=4,
+):
+    """Add one consistently formatted paragraph to the work-method textbox."""
+    p = tf.add_paragraph()
+    p.text = str(text)
+    p.level = 0
+    p.space_before = PPTXPt(space_before)
+    p.space_after = PPTXPt(space_after)
+
+    if p.runs:
+        mos_pro_set_run_font(
+            p.runs[0],
+            size=size,
+            bold=bold,
+            color=color,
+        )
+
+    return p
+
+
+def mos_pro_write_work_method_page(
+    shape,
+    page_title,
+    sections,
+    start_number=1,
+    stop_work=None,
+):
+    """
+    Write ONE clean work-method page.
+
+    The page contains clear section headings and short numbered steps instead
+    of compressing a long 10-18 step paragraph into one tiny textbox.
+    """
     tf = shape.text_frame
     tf.clear()
     tf.word_wrap = True
 
     title = tf.paragraphs[0]
-    title.text = "Work Method Statement for Lifting Operation:"
+    title.text = page_title
+    title.space_after = PPTXPt(7)
+
     if title.runs:
-        title.runs[0].font.bold = True
-        title.runs[0].font.size = PPTXPt(13)
+        mos_pro_set_run_font(
+            title.runs[0],
+            size=13.0,
+            bold=True,
+        )
 
-    intro = tf.add_paragraph()
-    intro.text = "The following project-specific work method shall be carried out for the lifting / machinery moving operation:"
-    if intro.runs:
-        intro.runs[0].font.size = PPTXPt(9.5)
+    step_no = start_number
 
-    lines = [line.strip() for line in str(work_method_text).splitlines() if line.strip()]
-    for line in lines:
-        p = tf.add_paragraph()
-        p.text = line
-        if p.runs:
-            p.runs[0].font.size = PPTXPt(9.2)
+    for section_title, steps in sections:
+        clean_steps = [
+            str(step).strip()
+            for step in (steps or [])
+            if str(step).strip()
+        ]
+
+        if not clean_steps:
+            continue
+
+        mos_pro_add_paragraph(
+            tf,
+            section_title,
+            size=10.8,
+            bold=True,
+            color=(31, 78, 121),
+            space_before=6,
+            space_after=3,
+        )
+
+        for step in clean_steps:
+            # The app controls numbering so accidental AI numbering is removed.
+            clean_step = re.sub(
+                r"^\s*\d+[\.\)]\s*",
+                "",
+                step,
+            ).strip()
+
+            mos_pro_add_paragraph(
+                tf,
+                f"{step_no}. {clean_step}",
+                size=9.8,
+                bold=False,
+                space_before=0,
+                space_after=4,
+            )
+            step_no += 1
+
+    if stop_work:
+        mos_pro_add_paragraph(
+            tf,
+            "STOP WORK",
+            size=10.8,
+            bold=True,
+            color=(192, 0, 0),
+            space_before=8,
+            space_after=2,
+        )
+
+        mos_pro_add_paragraph(
+            tf,
+            stop_work,
+            size=9.8,
+            bold=True,
+            color=(192, 0, 0),
+            space_before=0,
+            space_after=0,
+        )
+
+    return step_no
 
 
-def mos_pro_generate_work_method(description, machine, equipment, site_notes, operation_type):
+def mos_pro_write_work_method_two_pages(prs, slide_index, generated):
+    """
+    Convert the original crowded Work Method page into TWO clean pages.
+
+    PAGE 1
+    - A. Preparation
+    - B. Equipment Set-Up / Rigging
+
+    PAGE 2
+    - C. Hoisting / Machinery Movement
+    - D. Final Positioning / Completion
+    - STOP WORK
+
+    The second page is a duplicate of the master page, so EWMT branding,
+    header/footer and project-information formatting remain unchanged.
+    """
+    first_slide = prs.slides[slide_index]
+    first_shape = mos_pro_find_work_method_shape_on_slide(first_slide)
+
+    if first_shape is None:
+        raise RuntimeError(
+            "Could not locate the existing Work Method Statement textbox."
+        )
+
+    source_page_number = mos_pro_get_slide_number_text(first_slide)
+
+    second_slide = mos_pro_duplicate_slide_after(
+        prs,
+        slide_index,
+    )
+
+    second_shape = mos_pro_find_work_method_shape_on_slide(second_slide)
+
+    if second_shape is None:
+        raise RuntimeError(
+            "Could not locate the Work Method textbox on the continuation page."
+        )
+
+    # Keep the original document numbering stable.
+    # Example: page 15 becomes 15 + 15A, while the next master page stays page 16.
+    if source_page_number:
+        mos_pro_set_slide_number_text(
+            second_slide,
+            f"{source_page_number}A",
+        )
+
+    page1_sections = [
+        (
+            "A. PREPARATION",
+            generated.get("preparation", []),
+        ),
+        (
+            "B. EQUIPMENT SET-UP / RIGGING",
+            generated.get("equipment_setup_rigging", []),
+        ),
+    ]
+
+    page2_sections = [
+        (
+            "C. HOISTING / MACHINERY MOVEMENT",
+            generated.get("lifting_movement", []),
+        ),
+        (
+            "D. FINAL POSITIONING / COMPLETION",
+            generated.get("completion", []),
+        ),
+    ]
+
+    next_step_number = mos_pro_write_work_method_page(
+        first_shape,
+        "Work Method Statement for Lifting Operation",
+        page1_sections,
+        start_number=1,
+    )
+
+    mos_pro_write_work_method_page(
+        second_shape,
+        "Work Method Statement for Lifting Operation — Continued",
+        page2_sections,
+        start_number=next_step_number,
+        stop_work=generated.get("stop_work", ""),
+    )
+
+    first_page_label = source_page_number or str(slide_index + 1)
+    second_page_label = (
+        f"{source_page_number}A"
+        if source_page_number
+        else f"{slide_index + 1}A"
+    )
+
+    return first_page_label, second_page_label
+
+
+def mos_pro_generate_work_method(
+    description,
+    machine,
+    equipment,
+    site_notes,
+    operation_type,
+):
+    """
+    Generate a concise two-page project work method.
+
+    The existing Method Statement vector store is still searched for relevant
+    historical methodology, but old customer/project-specific details must not
+    be copied into the new job.
+    """
     prompt = f"""
-Prepare ONLY the project-specific Work Method Statement steps for insertion into the EWMT professional MOS PowerPoint master.
+Prepare PROJECT-SPECIFIC work-method steps for the EWMT professional Method Statement PowerPoint.
 
-Follow the EWMT master standard and Singapore machinery-moving / lifting contractor wording.
-Do not rewrite the master safety procedure pages. The master already contains the standard WSH, lift classification, competent-person, crane-selection, ground/outrigger, pre-start and emergency sections.
+Before generating the method, use the EWMT Method Statement vector store to study relevant previous machinery-moving and lifting cases.
 
-PROJECT OPERATION
+CURRENT JOB
 Operation type: {operation_type}
 Description of work: {description}
 Machine / load: {machine}
 Equipment actually intended: {equipment}
 Site / access notes: {site_notes}
 
-Requirements:
-- Produce 10 to 18 concise numbered work steps only.
-- Use only equipment actually stated by the user. Do not invent cranes, forklifts or lifting gear.
-- Include site briefing / toolbox meeting before commencement.
+IMPORTANT RULES
+- Use previous vector-store cases only for methodology, practical work sequence and relevant controls.
+- NEVER copy old customer names, old site names, dates, prices, crane registration numbers, worker names or machine details from previous jobs.
+- Use ONLY equipment stated for this current job.
+- Do not invent cranes, forklifts, slings, shackles, spreader beams, hydraulic jacks, machine skates or other equipment.
+- Keep each step SHORT, practical and specific.
+- Each step should normally be about 12 to 22 words.
+- Do not write paragraph-length steps.
+- Do not repeat the general WSH wording already contained in the master MOS.
+- Total work sequence should normally contain approximately 10 to 14 steps.
+- Include a site briefing / toolbox meeting before commencement.
 - Include barricading / exclusion-zone control when relevant.
-- If a crane or lorry loader is used: verify load weight, lifting points, radius, SWL/load chart, lifting gear, ground/outrigger support, trial lift and tag-line control where applicable.
-- If machinery is shifted on floor: include floor protection, jacking / skates / forklift only when stated.
-- Include controlled movement, final positioning, de-rigging and housekeeping.
-- Include a STOP WORK step if actual site conditions differ from the approved plan or become unsafe.
-- Do not include generic commentary, conclusions or explanations.
-- Return plain numbered steps in a single string.
+- If crane / lorry-loader lifting is actually stated, include relevant setup, load/radius/SWL verification, rigging inspection, trial lift and controlled lifting.
+- If floor shifting is involved, use only the floor-moving equipment actually stated by the user.
+- Include final positioning, de-rigging and housekeeping.
+- STOP WORK must be one short statement only.
+
+Return JSON only with these exact fields:
+
+preparation
+- Array of 3 to 4 short steps.
+
+equipment_setup_rigging
+- Array of 2 to 4 short steps.
+- Return an empty array when this section is not applicable.
+
+lifting_movement
+- Array of 3 to 4 short steps.
+
+completion
+- Array of 2 to 3 short steps.
+
+stop_work
+- One concise STOP WORK statement.
 """
 
     response = client.responses.create(
@@ -1242,26 +1580,69 @@ Requirements:
         input=prompt,
         tools=[{
             "type": "file_search",
-            "vector_store_ids": [MS_VECTOR_STORE_ID]
+            "vector_store_ids": [MS_VECTOR_STORE_ID],
         }],
         text={
             "format": {
                 "type": "json_schema",
-                "name": "mos_pro_work_method_schema",
+                "name": "mos_pro_clean_work_method_schema",
                 "schema": {
                     "type": "object",
                     "additionalProperties": False,
                     "properties": {
-                        "work_method": {"type": "string"}
+                        "preparation": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "equipment_setup_rigging": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "lifting_movement": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "completion": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "stop_work": {
+                            "type": "string",
+                        },
                     },
-                    "required": ["work_method"]
-                }
-            }
-        }
+                    "required": [
+                        "preparation",
+                        "equipment_setup_rigging",
+                        "lifting_movement",
+                        "completion",
+                        "stop_work",
+                    ],
+                },
+            },
+        },
     )
 
     result = json.loads(response.output_text)
-    return clean_ms_text(result.get("work_method", ""))
+
+    # Final defensive cleanup. The structured JSON means each item is already
+    # separate, but remove unwanted "company format" commentary if it appears.
+    for key in (
+        "preparation",
+        "equipment_setup_rigging",
+        "lifting_movement",
+        "completion",
+    ):
+        result[key] = [
+            clean_ms_text(step)
+            for step in result.get(key, [])
+            if clean_ms_text(step)
+        ]
+
+    result["stop_work"] = clean_ms_text(
+        result.get("stop_work", "")
+    )
+
+    return result
 
 
 def mos_pro_build_powerpoint(project_data, replace_work_method=False, work_method_data=None):
@@ -1282,6 +1663,7 @@ def mos_pro_build_powerpoint(project_data, replace_work_method=False, work_metho
 
     if replace_work_method:
         work_method_data = work_method_data or {}
+
         generated = mos_pro_generate_work_method(
             work_method_data.get("description", ""),
             work_method_data.get("machine", ""),
@@ -1289,12 +1671,22 @@ def mos_pro_build_powerpoint(project_data, replace_work_method=False, work_metho
             work_method_data.get("site_notes", ""),
             work_method_data.get("operation_type", ""),
         )
+
         slide_index, shape = mos_pro_find_work_method_shape(prs)
+
         if shape is None:
-            raise RuntimeError("Could not locate the existing Work Method Statement page in the master PowerPoint.")
-        mos_pro_write_work_method(shape, generated)
+            raise RuntimeError(
+                "Could not locate the existing Work Method Statement page in the master PowerPoint."
+            )
+
+        first_page, continuation_page = mos_pro_write_work_method_two_pages(
+            prs,
+            slide_index,
+            generated,
+        )
+
         replaced_work_method = True
-        work_method_slide = slide_index + 1
+        work_method_slide = f"{first_page} / {continuation_page}"
 
     output = BytesIO()
     prs.save(output)
