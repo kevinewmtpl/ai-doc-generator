@@ -2,3 +2,5 @@ streamlit
 openai
 python-docx
 pymupdf
+Pillow
+requests
