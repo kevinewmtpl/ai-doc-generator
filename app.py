@@ -22,12 +22,14 @@ try:
     from pptx import Presentation
     from pptx.util import Pt as PPTXPt
     from pptx.enum.shapes import MSO_SHAPE_TYPE
+    from pptx.enum.text import PP_ALIGN
     from pptx.dml.color import RGBColor
     PPTX_AVAILABLE = True
 except Exception:
     Presentation = None
     PPTXPt = None
     MSO_SHAPE_TYPE = None
+    PP_ALIGN = None
     RGBColor = None
     PPTX_AVAILABLE = False
 
@@ -1310,7 +1312,7 @@ def mos_pro_add_paragraph(
     space_before=0,
     space_after=4,
 ):
-    """Add one consistently formatted paragraph to the work-method textbox."""
+    """Add one consistently formatted paragraph to a MOS PRO text box."""
     p = tf.add_paragraph()
     p.text = str(text)
     p.level = 0
@@ -1340,6 +1342,18 @@ def mos_pro_clean_generated_step(text):
     )
 
     text = re.sub(r"[ \t]+", " ", text)
+
+    # Historical vector-store documents may occasionally influence the model to
+    # add comments such as "consistent with EWMT's normal practice".  The
+    # methodology can use that experience silently; customer-facing wording
+    # should contain only the actual work method.
+    text = re.sub(
+        r"\s*,?\s*(?:consistent with|in line with|following|reflecting)\s+EWMT(?:'s|’s)?\s+[^\.]*\.?$",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
     return text.strip()
 
 
@@ -1348,157 +1362,311 @@ def mos_pro_step_word_count(step):
     return len(str(step or "").split())
 
 
-def mos_pro_prepare_page_groups(
-    generated,
-    max_words_per_page=260,
-    max_steps_per_page=4,
-):
-    """
-    Pack detailed Method Statement steps efficiently into PowerPoint pages.
-
-    The previous pagination algorithm was deliberately conservative and could
-    place only one or two detailed steps on a page.  This version uses the
-    actual amount of text instead:
-
-    - normally up to 4 detailed steps per page;
-    - approximately 260 words of work-method text per page;
-    - multiple sections may share one page when space remains;
-    - a section heading is repeated only when that section genuinely continues
-      onto the next page;
-    - no work-method wording is shortened or removed merely to save pages.
-    """
+def mos_pro_section_definitions(generated):
+    """Return the A-F work phases in their fixed professional order."""
     raw_sections = [
-        ("PRE-WORK PREPARATION", generated.get("preparation", [])),
-        ("DELIVERY / EQUIPMENT SET-UP", generated.get("delivery_setup", [])),
-        ("RIGGING / LIFTING OPERATION", generated.get("rigging_lifting", [])),
-        ("MACHINERY MOVEMENT / SHIFTING", generated.get("machinery_movement", [])),
-        ("FINAL POSITIONING / INSTALLATION", generated.get("final_positioning", [])),
-        ("COMPLETION / HOUSEKEEPING", generated.get("completion", [])),
+        ("A", "PRE-WORK PREPARATION", generated.get("preparation", [])),
+        ("B", "DELIVERY / EQUIPMENT SET-UP", generated.get("delivery_setup", [])),
+        ("C", "RIGGING / LIFTING OPERATION", generated.get("rigging_lifting", [])),
+        ("D", "MACHINERY MOVEMENT / SHIFTING", generated.get("machinery_movement", [])),
+        ("E", "FINAL POSITIONING / INSTALLATION", generated.get("final_positioning", [])),
+        ("F", "COMPLETION / HOUSEKEEPING", generated.get("completion", [])),
     ]
 
-    active_sections = [
-        (title, [
+    result = []
+    for letter, title, steps in raw_sections:
+        cleaned = [
             mos_pro_clean_generated_step(step)
             for step in (steps or [])
             if mos_pro_clean_generated_step(step)
-        ])
-        for title, steps in raw_sections
-        if steps
-    ]
+        ]
+        if cleaned:
+            result.append((letter, title, cleaned))
 
-    pages = []
-    current_page = []
-    current_words = 0
-    current_steps = 0
+    return result
 
-    def flush_page():
-        nonlocal current_page, current_words, current_steps
-        if current_page:
-            pages.append(current_page)
-        current_page = []
-        current_words = 0
-        current_steps = 0
 
-    for section_index, (title, steps) in enumerate(active_sections):
-        letter = chr(ord("A") + section_index)
+def mos_pro_blocks_from_records(records):
+    """Rebuild consecutive section blocks from flattened step records."""
+    blocks = []
+
+    for letter, title, step in records:
         section_title = f"{letter}. {title}"
-        section_started = False
 
-        for step in steps:
-            step_words = mos_pro_step_word_count(step)
+        if blocks and blocks[-1][0] == section_title:
+            blocks[-1][1].append(step)
+        else:
+            blocks.append((section_title, [step]))
 
-            # Heading is needed on the first appearance of the section and on
-            # a new page when the same section continues.
-            heading_text = section_title if not section_started else f"{section_title} — CONTINUED"
-            heading_words = len(heading_text.split())
-
-            # If the current page already contains this section, no extra
-            # heading is required for the next step on the same page.
-            page_has_section = any(
-                item_title.startswith(section_title)
-                for item_title, _ in current_page
-            )
-            added_heading_words = 0 if page_has_section else heading_words
-
-            would_exceed_words = (
-                current_page
-                and current_words + added_heading_words + step_words > max_words_per_page
-            )
-            would_exceed_steps = (
-                current_page
-                and current_steps + 1 > max_steps_per_page
-            )
-
-            if would_exceed_words or would_exceed_steps:
-                flush_page()
-                page_has_section = False
-                added_heading_words = heading_words
-
-            if not page_has_section:
-                display_title = section_title if not section_started else f"{section_title} — CONTINUED"
-                current_page.append((display_title, []))
-                current_words += len(display_title.split())
-
-            # Add the step to the last matching section block on this page.
-            current_page[-1][1].append(step)
-            current_words += step_words
-            current_steps += 1
-            section_started = True
-
-    flush_page()
-
-    # Avoid an unattractive final page containing only one work step where
-    # possible. Move one step from the previous page if both pages remain
-    # within a practical reading length.
-    if len(pages) >= 2:
-        last_step_count = sum(len(steps) for _, steps in pages[-1])
-        prev_step_count = sum(len(steps) for _, steps in pages[-2])
-
-        if last_step_count == 1 and prev_step_count >= 3:
-            prev_title, prev_steps = pages[-2][-1]
-            if len(prev_steps) >= 2:
-                moved = prev_steps.pop()
-                base_title = re.sub(r"\s+—\s+CONTINUED$", "", prev_title)
-
-                if pages[-1] and pages[-1][0][0].startswith(base_title):
-                    pages[-1][0][1].insert(0, moved)
-                else:
-                    pages[-1].insert(0, (f"{base_title} — CONTINUED", [moved]))
-
-    return pages
+    return blocks
 
 
-def mos_pro_write_work_method_page(
-    shape,
-    page_title,
-    sections,
-    start_number=1,
-    stop_work=None,
+def mos_pro_prepare_page_groups(
+    generated,
+    max_words_per_page=520,
+    max_steps_per_page=10,
 ):
     """
-    Write one professional Method Statement page.
+    Pack the detailed Method Statement into efficient TWO-COLUMN pages.
 
-    Detailed methodology is preserved. Additional pages are created by the
-    page builder instead of shrinking the content or forcing overly-short steps.
+    Design target:
+    - normally 7-10 detailed steps per page;
+    - about 520 words maximum per page;
+    - section changes may occur on the same page;
+    - no artificial shortening of the generated methodology;
+    - no repeated "— CONTINUED" title clutter.
+
+    The actual page is later split into balanced left/right columns.
     """
-    tf = shape.text_frame
-    tf.clear()
-    tf.word_wrap = True
+    records = []
 
-    title = tf.paragraphs[0]
-    title.text = page_title
-    title.space_after = PPTXPt(5)
+    for letter, title, steps in mos_pro_section_definitions(generated):
+        for step in steps:
+            records.append((letter, title, step))
 
-    if title.runs:
-        mos_pro_set_run_font(
-            title.runs[0],
-            size=12.0,
-            bold=True,
+    if not records:
+        return []
+
+    pages_records = []
+    current = []
+    current_words = 0
+
+    for record in records:
+        letter, title, step = record
+        step_words = mos_pro_step_word_count(step)
+
+        # Allow a small amount of heading overhead when a new phase starts.
+        heading_words = 0
+        if not current or current[-1][0] != letter:
+            heading_words = len(title.split()) + 1
+
+        would_exceed_words = (
+            current
+            and current_words + heading_words + step_words > max_words_per_page
+        )
+        would_exceed_steps = (
+            current
+            and len(current) + 1 > max_steps_per_page
         )
 
-    step_no = start_number
+        if would_exceed_words or would_exceed_steps:
+            pages_records.append(current)
+            current = []
+            current_words = 0
+            heading_words = len(title.split()) + 1
+
+        current.append(record)
+        current_words += heading_words + step_words
+
+    if current:
+        pages_records.append(current)
+
+    # Rebalance a very short final page by moving trailing steps from the
+    # previous page.  Keep sequence unchanged and do not exceed 10 steps.
+    if len(pages_records) >= 2:
+        last = pages_records[-1]
+        prev = pages_records[-2]
+
+        while (
+            len(last) < 6
+            and len(prev) > 7
+            and len(last) < max_steps_per_page
+        ):
+            moved = prev.pop()
+            last.insert(0, moved)
+
+    return [mos_pro_blocks_from_records(page) for page in pages_records]
+
+
+def mos_pro_flatten_page_sections(sections):
+    """Flatten one page's section blocks while preserving phase labels."""
+    records = []
 
     for section_title, steps in sections:
+        match = re.match(r"^([A-F])\.\s*(.*)$", section_title.strip())
+        if match:
+            letter = match.group(1)
+            title = match.group(2)
+        else:
+            letter = ""
+            title = section_title.strip()
+
+        for step in steps:
+            records.append((letter, title, step))
+
+    return records
+
+
+def mos_pro_split_page_into_columns(sections):
+    """
+    Split one page into two balanced columns by estimated reading load.
+
+    The work sequence remains left-column first, then right-column.  A section
+    heading is repeated at the top of the right column when the same phase
+    crosses the column boundary; "— CONTINUED" is intentionally omitted.
+    """
+    records = mos_pro_flatten_page_sections(sections)
+
+    if len(records) <= 1:
+        return mos_pro_blocks_from_records(records), []
+
+    weights = []
+    previous_letter = None
+
+    for letter, title, step in records:
+        weight = mos_pro_step_word_count(step)
+        if letter != previous_letter:
+            weight += 8  # heading / visual spacing allowance
+        weights.append(weight)
+        previous_letter = letter
+
+    total = sum(weights)
+    target = total / 2
+
+    running = 0
+    best_index = 1
+    best_diff = float("inf")
+
+    for i in range(1, len(records)):
+        running += weights[i - 1]
+        diff = abs(target - running)
+
+        # Avoid a single-item column unless the whole page has only two items.
+        left_count = i
+        right_count = len(records) - i
+        penalty = 0
+        if len(records) > 2 and (left_count == 1 or right_count == 1):
+            penalty = 80
+
+        score = diff + penalty
+
+        if score < best_diff:
+            best_diff = score
+            best_index = i
+
+    left_records = records[:best_index]
+    right_records = records[best_index:]
+
+    return (
+        mos_pro_blocks_from_records(left_records),
+        mos_pro_blocks_from_records(right_records),
+    )
+
+
+def mos_pro_remove_shape(shape):
+    """Remove the original single-column Method Statement textbox."""
+    element = shape.element
+    parent = element.getparent()
+    if parent is not None:
+        parent.remove(element)
+
+
+def mos_pro_create_textbox(slide, left, top, width, height):
+    """Create a clean textbox with very small internal margins."""
+    box = slide.shapes.add_textbox(left, top, width, height)
+    tf = box.text_frame
+    tf.clear()
+    tf.word_wrap = True
+    tf.margin_left = PPTXPt(1.5)
+    tf.margin_right = PPTXPt(1.5)
+    tf.margin_top = PPTXPt(1.0)
+    tf.margin_bottom = PPTXPt(1.0)
+    return box
+
+
+def mos_pro_add_page_title(slide):
+    """Add the centred Method Statement title used on every work-method page."""
+    box = mos_pro_create_textbox(
+        slide,
+        292608,
+        3017520,
+        6272784,
+        237744,
+    )
+
+    tf = box.text_frame
+    p = tf.paragraphs[0]
+    p.text = "Work Method Statement for Lifting Operation"
+    p.alignment = PP_ALIGN.CENTER if PP_ALIGN is not None else None
+    p.space_after = PPTXPt(2.0)
+
+    if p.runs:
+        mos_pro_set_run_font(
+            p.runs[0],
+            size=14.0,
+            bold=True,
+            color=(31, 41, 55),
+        )
+
+    return box
+
+
+def mos_pro_add_phase_ribbon(slide, active_letters):
+    """
+    Add one compact A-F phase ribbon below the page title.
+
+    Active phases are blue / bold. Inactive phases are light grey.  This
+    replaces the repetitive large "— Continued" heading on every slide.
+    """
+    box = mos_pro_create_textbox(
+        slide,
+        292608,
+        3273552,
+        6272784,
+        237744,
+    )
+
+    tf = box.text_frame
+    p = tf.paragraphs[0]
+    p.alignment = PP_ALIGN.CENTER if PP_ALIGN is not None else None
+    p.space_after = PPTXPt(2.0)
+
+    phases = [
+        ("A", "PREPARATION"),
+        ("B", "SET-UP"),
+        ("C", "LIFTING"),
+        ("D", "MOVEMENT"),
+        ("E", "POSITIONING"),
+        ("F", "COMPLETION"),
+    ]
+
+    active_letters = set(active_letters or [])
+
+    for index, (letter, label) in enumerate(phases):
+        if index > 0:
+            spacer = p.add_run()
+            spacer.text = "   "
+            mos_pro_set_run_font(
+                spacer,
+                size=7.1,
+                bold=False,
+                color=(156, 163, 175),
+            )
+
+        active = letter in active_letters
+        run = p.add_run()
+        run.text = f"{'●' if active else '○'} {letter} {label}"
+        mos_pro_set_run_font(
+            run,
+            size=7.1,
+            bold=active,
+            color=(30, 64, 175) if active else (156, 163, 175),
+        )
+
+    return box
+
+
+def mos_pro_write_column(slide, blocks, x, y, width, height, start_number):
+    """Write one balanced work-method column and return the next step number."""
+    box = mos_pro_create_textbox(slide, x, y, width, height)
+    tf = box.text_frame
+
+    # Remove the empty paragraph produced by TextFrame.clear().  We reuse it
+    # for the first real heading/step so no invisible blank line is left above.
+    first_content = True
+    step_no = start_number
+
+    for section_title, steps in blocks:
         clean_steps = [
             mos_pro_clean_generated_step(step)
             for step in (steps or [])
@@ -1508,52 +1676,147 @@ def mos_pro_write_work_method_page(
         if not clean_steps:
             continue
 
-        mos_pro_add_paragraph(
-            tf,
-            section_title,
-            size=10.0,
-            bold=True,
-            color=(31, 78, 121),
-            space_before=4,
-            space_after=2,
-        )
+        if first_content:
+            p = tf.paragraphs[0]
+            p.text = section_title
+            p.level = 0
+            p.space_before = PPTXPt(0)
+            p.space_after = PPTXPt(4.2)
+            if p.runs:
+                mos_pro_set_run_font(
+                    p.runs[0],
+                    size=10.4,
+                    bold=True,
+                    color=(31, 78, 121),
+                )
+            first_content = False
+        else:
+            mos_pro_add_paragraph(
+                tf,
+                section_title,
+                size=10.4,
+                bold=True,
+                color=(31, 78, 121),
+                space_before=4.2,
+                space_after=4.2,
+            )
 
         for step in clean_steps:
             mos_pro_add_paragraph(
                 tf,
                 f"{step_no}. {step}",
-                size=9.0,
+                size=8.8,
                 bold=False,
+                color=(31, 41, 55),
                 space_before=0,
-                space_after=2,
+                space_after=5.2,
             )
             step_no += 1
 
-    if stop_work:
-        clean_stop = mos_pro_clean_generated_step(stop_work)
-
-        if clean_stop:
-            mos_pro_add_paragraph(
-                tf,
-                "STOP WORK",
-                size=10.5,
-                bold=True,
-                color=(192, 0, 0),
-                space_before=7,
-                space_after=2,
-            )
-
-            mos_pro_add_paragraph(
-                tf,
-                clean_stop,
-                size=9.4,
-                bold=True,
-                color=(192, 0, 0),
-                space_before=0,
-                space_after=0,
-            )
-
     return step_no
+
+
+def mos_pro_page_active_letters(sections):
+    """Return A-F phase letters present on one generated page."""
+    active = []
+
+    for section_title, _ in sections:
+        match = re.match(r"^([A-F])\.", str(section_title).strip())
+        if match and match.group(1) not in active:
+            active.append(match.group(1))
+
+    return active
+
+
+def mos_pro_add_stop_work_box(slide, stop_work):
+    """Add the final STOP WORK statement as a compact full-width footer box."""
+    clean_stop = mos_pro_clean_generated_step(stop_work)
+    if not clean_stop:
+        return None
+
+    box = mos_pro_create_textbox(
+        slide,
+        365760,
+        8494776,
+        6126480,
+        585216,
+    )
+
+    tf = box.text_frame
+    p = tf.paragraphs[0]
+    p.text = f"STOP WORK: {clean_stop}"
+    p.space_before = PPTXPt(0)
+    p.space_after = PPTXPt(4.0)
+
+    if p.runs:
+        mos_pro_set_run_font(
+            p.runs[0],
+            size=8.8,
+            bold=True,
+            color=(192, 0, 0),
+        )
+
+    return box
+
+
+def mos_pro_write_two_column_page(
+    slide,
+    source_shape,
+    sections,
+    start_number=1,
+    stop_work=None,
+):
+    """
+    Replace the old single-column Method Statement textbox with the approved
+    compact two-column layout.
+
+    Layout standard approved for EWMT MOS PRO:
+    - 14 pt centred page title;
+    - compact A-F phase ribbon;
+    - two 3.3-inch work-method columns;
+    - 10.4 pt blue phase headings;
+    - 8.8 pt Arial body text;
+    - 5.2 pt spacing after every numbered step;
+    - STOP WORK shown once on the final page.
+    """
+    mos_pro_remove_shape(source_shape)
+
+    mos_pro_add_page_title(slide)
+    mos_pro_add_phase_ribbon(
+        slide,
+        mos_pro_page_active_letters(sections),
+    )
+
+    left_blocks, right_blocks = mos_pro_split_page_into_columns(sections)
+
+    # Approved coordinates from the EWMT master presentation.
+    column_y = 3566160
+    column_height = 5806440 if not stop_work else 5349240
+
+    next_number = mos_pro_write_column(
+        slide,
+        left_blocks,
+        310896,
+        column_y,
+        3035808,
+        column_height,
+        start_number,
+    )
+
+    next_number = mos_pro_write_column(
+        slide,
+        right_blocks,
+        3493008,
+        column_y,
+        3035808,
+        column_height,
+        next_number,
+    )
+
+    if stop_work:
+        mos_pro_add_stop_work_box(slide, stop_work)
+
+    return next_number
 
 
 def mos_pro_continuation_suffix(index):
@@ -1565,16 +1828,18 @@ def mos_pro_continuation_suffix(index):
 
 def mos_pro_write_work_method_pages(prs, slide_index, generated):
     """
-    Write the Method Statement across as many master-format pages as required.
+    Build the final MOS PRO Work Method section in the approved two-column style.
 
-    The original PRO version forced the method into two pages. This version
-    duplicates the EWMT master Method page automatically whenever more room is
-    required, preserving branding, headers, footers and project information.
+    IMPORTANT:
+    All required continuation slides are duplicated from the untouched master
+    page BEFORE any page is reformatted. This prevents a generated two-column
+    slide from being duplicated recursively and keeps every continuation page
+    consistent with the original EWMT header/footer/project information.
     """
     page_groups = mos_pro_prepare_page_groups(
         generated,
-        max_words_per_page=260,
-        max_steps_per_page=4,
+        max_words_per_page=520,
+        max_steps_per_page=10,
     )
 
     if not page_groups:
@@ -1592,38 +1857,33 @@ def mos_pro_write_work_method_pages(prs, slide_index, generated):
 
     original_page_number = mos_pro_get_slide_number_text(first_slide)
 
+    # Create every required continuation page while the source page still has
+    # the untouched single-column master textbox.
+    for _ in range(1, len(page_groups)):
+        mos_pro_duplicate_slide_after(prs, slide_index)
+
     page_labels = []
     next_step_number = 1
 
     for page_index, sections in enumerate(page_groups):
-        if page_index == 0:
-            slide = first_slide
-            shape = first_shape
-            page_title = "Work Method Statement for Lifting Operation"
-            page_label = original_page_number or str(slide_index + 1)
-        else:
-            previous_slide_index = slide_index + page_index - 1
-            slide = mos_pro_duplicate_slide_after(
-                prs,
-                previous_slide_index,
+        slide = prs.slides[slide_index + page_index]
+        source_shape = mos_pro_find_work_method_shape_on_slide(slide)
+
+        if source_shape is None:
+            raise RuntimeError(
+                "Could not locate the master Work Method textbox on a generated page."
             )
 
-            shape = mos_pro_find_work_method_shape_on_slide(slide)
-
-            if shape is None:
-                raise RuntimeError(
-                    "Could not locate Work Method textbox on continuation page."
-                )
-
+        if page_index == 0:
+            page_label = original_page_number or str(slide_index + 1)
+        else:
             suffix = mos_pro_continuation_suffix(page_index)
-
-            if original_page_number:
-                page_label = f"{original_page_number}{suffix}"
-            else:
-                page_label = f"{slide_index + 1}{suffix}"
-
+            page_label = (
+                f"{original_page_number}{suffix}"
+                if original_page_number
+                else f"{slide_index + 1}{suffix}"
+            )
             mos_pro_set_slide_number_text(slide, page_label)
-            page_title = "Work Method Statement for Lifting Operation — Continued"
 
         page_labels.append(page_label)
 
@@ -1631,9 +1891,9 @@ def mos_pro_write_work_method_pages(prs, slide_index, generated):
         if page_index == len(page_groups) - 1:
             stop_work = generated.get("stop_work", "")
 
-        next_step_number = mos_pro_write_work_method_page(
-            shape,
-            page_title,
+        next_step_number = mos_pro_write_two_column_page(
+            slide,
+            source_shape,
             sections,
             start_number=next_step_number,
             stop_work=stop_work,
