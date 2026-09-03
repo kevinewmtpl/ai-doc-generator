@@ -1343,65 +1343,29 @@ def mos_pro_clean_generated_step(text):
     return text.strip()
 
 
-def mos_pro_estimate_step_units(step):
+def mos_pro_step_word_count(step):
+    """Return an approximate word count for one generated work-method step."""
+    return len(str(step or "").split())
+
+
+def mos_pro_prepare_page_groups(
+    generated,
+    max_words_per_page=260,
+    max_steps_per_page=4,
+):
     """
-    Estimate vertical space required by a Method Statement step.
+    Pack detailed Method Statement steps efficiently into PowerPoint pages.
 
-    The aim is to preserve detailed methodology and add pages when necessary,
-    rather than forcing the AI to shorten important work instructions.
-    """
-    words = len(str(step or "").split())
+    The previous pagination algorithm was deliberately conservative and could
+    place only one or two detailed steps on a page.  This version uses the
+    actual amount of text instead:
 
-    if words <= 24:
-        return 1
-    if words <= 48:
-        return 2
-    if words <= 72:
-        return 3
-    return 4
-
-
-def mos_pro_split_section_chunks(title, steps, max_units=9):
-    """Split a long methodology section into page-sized chunks."""
-    clean_steps = [
-        mos_pro_clean_generated_step(step)
-        for step in (steps or [])
-        if mos_pro_clean_generated_step(step)
-    ]
-
-    if not clean_steps:
-        return []
-
-    chunks = []
-    current_chunk = []
-    current_units = 1  # section heading
-
-    for step in clean_steps:
-        step_units = mos_pro_estimate_step_units(step)
-
-        if current_chunk and current_units + step_units > max_units:
-            chunks.append(current_chunk)
-            current_chunk = []
-            current_units = 1
-
-        current_chunk.append(step)
-        current_units += step_units
-
-    if current_chunk:
-        chunks.append(current_chunk)
-
-    result = []
-    for index, chunk in enumerate(chunks):
-        chunk_title = title if index == 0 else f"{title} — CONTINUED"
-        result.append((chunk_title, chunk))
-
-    return result
-
-
-def mos_pro_prepare_page_groups(generated, max_units_per_page=9):
-    """
-    Convert generated methodology into as many professional PowerPoint pages
-    as required. Sections that are not applicable are omitted automatically.
+    - normally up to 4 detailed steps per page;
+    - approximately 260 words of work-method text per page;
+    - multiple sections may share one page when space remains;
+    - a section heading is repeated only when that section genuinely continues
+      onto the next page;
+    - no work-method wording is shortened or removed merely to save pages.
     """
     raw_sections = [
         ("PRE-WORK PREPARATION", generated.get("preparation", [])),
@@ -1413,50 +1377,93 @@ def mos_pro_prepare_page_groups(generated, max_units_per_page=9):
     ]
 
     active_sections = [
-        (title, steps)
+        (title, [
+            mos_pro_clean_generated_step(step)
+            for step in (steps or [])
+            if mos_pro_clean_generated_step(step)
+        ])
         for title, steps in raw_sections
         if steps
     ]
 
-    labelled_sections = []
+    pages = []
+    current_page = []
+    current_words = 0
+    current_steps = 0
+
+    def flush_page():
+        nonlocal current_page, current_words, current_steps
+        if current_page:
+            pages.append(current_page)
+        current_page = []
+        current_words = 0
+        current_steps = 0
 
     for section_index, (title, steps) in enumerate(active_sections):
         letter = chr(ord("A") + section_index)
-        labelled_title = f"{letter}. {title}"
+        section_title = f"{letter}. {title}"
+        section_started = False
 
-        labelled_sections.extend(
-            mos_pro_split_section_chunks(
-                labelled_title,
-                steps,
-                max_units=max_units_per_page,
+        for step in steps:
+            step_words = mos_pro_step_word_count(step)
+
+            # Heading is needed on the first appearance of the section and on
+            # a new page when the same section continues.
+            heading_text = section_title if not section_started else f"{section_title} — CONTINUED"
+            heading_words = len(heading_text.split())
+
+            # If the current page already contains this section, no extra
+            # heading is required for the next step on the same page.
+            page_has_section = any(
+                item_title.startswith(section_title)
+                for item_title, _ in current_page
             )
-        )
+            added_heading_words = 0 if page_has_section else heading_words
 
-    pages = []
-    current_page = []
-    current_units = 0
+            would_exceed_words = (
+                current_page
+                and current_words + added_heading_words + step_words > max_words_per_page
+            )
+            would_exceed_steps = (
+                current_page
+                and current_steps + 1 > max_steps_per_page
+            )
 
-    for title, steps in labelled_sections:
-        section_units = 1 + sum(
-            mos_pro_estimate_step_units(step)
-            for step in steps
-        )
+            if would_exceed_words or would_exceed_steps:
+                flush_page()
+                page_has_section = False
+                added_heading_words = heading_words
 
-        if current_page and current_units + section_units > max_units_per_page:
-            pages.append(current_page)
-            current_page = []
-            current_units = 0
+            if not page_has_section:
+                display_title = section_title if not section_started else f"{section_title} — CONTINUED"
+                current_page.append((display_title, []))
+                current_words += len(display_title.split())
 
-        current_page.append((title, steps))
-        current_units += section_units
+            # Add the step to the last matching section block on this page.
+            current_page[-1][1].append(step)
+            current_words += step_words
+            current_steps += 1
+            section_started = True
 
-        if current_units >= max_units_per_page:
-            pages.append(current_page)
-            current_page = []
-            current_units = 0
+    flush_page()
 
-    if current_page:
-        pages.append(current_page)
+    # Avoid an unattractive final page containing only one work step where
+    # possible. Move one step from the previous page if both pages remain
+    # within a practical reading length.
+    if len(pages) >= 2:
+        last_step_count = sum(len(steps) for _, steps in pages[-1])
+        prev_step_count = sum(len(steps) for _, steps in pages[-2])
+
+        if last_step_count == 1 and prev_step_count >= 3:
+            prev_title, prev_steps = pages[-2][-1]
+            if len(prev_steps) >= 2:
+                moved = prev_steps.pop()
+                base_title = re.sub(r"\s+—\s+CONTINUED$", "", prev_title)
+
+                if pages[-1] and pages[-1][0][0].startswith(base_title):
+                    pages[-1][0][1].insert(0, moved)
+                else:
+                    pages[-1].insert(0, (f"{base_title} — CONTINUED", [moved]))
 
     return pages
 
@@ -1480,12 +1487,12 @@ def mos_pro_write_work_method_page(
 
     title = tf.paragraphs[0]
     title.text = page_title
-    title.space_after = PPTXPt(7)
+    title.space_after = PPTXPt(5)
 
     if title.runs:
         mos_pro_set_run_font(
             title.runs[0],
-            size=12.5,
+            size=12.0,
             bold=True,
         )
 
@@ -1504,21 +1511,21 @@ def mos_pro_write_work_method_page(
         mos_pro_add_paragraph(
             tf,
             section_title,
-            size=10.5,
+            size=10.0,
             bold=True,
             color=(31, 78, 121),
-            space_before=5,
-            space_after=3,
+            space_before=4,
+            space_after=2,
         )
 
         for step in clean_steps:
             mos_pro_add_paragraph(
                 tf,
                 f"{step_no}. {step}",
-                size=9.4,
+                size=9.0,
                 bold=False,
                 space_before=0,
-                space_after=3,
+                space_after=2,
             )
             step_no += 1
 
@@ -1566,7 +1573,8 @@ def mos_pro_write_work_method_pages(prs, slide_index, generated):
     """
     page_groups = mos_pro_prepare_page_groups(
         generated,
-        max_units_per_page=9,
+        max_words_per_page=260,
+        max_steps_per_page=4,
     )
 
     if not page_groups:
