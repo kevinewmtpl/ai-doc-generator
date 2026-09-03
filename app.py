@@ -1328,6 +1328,139 @@ def mos_pro_add_paragraph(
     return p
 
 
+def mos_pro_clean_generated_step(text):
+    """Clean AI numbering / spacing without shortening the actual methodology."""
+    text = str(text or "").strip()
+
+    text = re.sub(
+        r"^\s*(?:step\s*)?\d+\s*[\.\)\:\-]\s*",
+        "",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    text = re.sub(r"[ \t]+", " ", text)
+    return text.strip()
+
+
+def mos_pro_estimate_step_units(step):
+    """
+    Estimate vertical space required by a Method Statement step.
+
+    The aim is to preserve detailed methodology and add pages when necessary,
+    rather than forcing the AI to shorten important work instructions.
+    """
+    words = len(str(step or "").split())
+
+    if words <= 24:
+        return 1
+    if words <= 48:
+        return 2
+    if words <= 72:
+        return 3
+    return 4
+
+
+def mos_pro_split_section_chunks(title, steps, max_units=9):
+    """Split a long methodology section into page-sized chunks."""
+    clean_steps = [
+        mos_pro_clean_generated_step(step)
+        for step in (steps or [])
+        if mos_pro_clean_generated_step(step)
+    ]
+
+    if not clean_steps:
+        return []
+
+    chunks = []
+    current_chunk = []
+    current_units = 1  # section heading
+
+    for step in clean_steps:
+        step_units = mos_pro_estimate_step_units(step)
+
+        if current_chunk and current_units + step_units > max_units:
+            chunks.append(current_chunk)
+            current_chunk = []
+            current_units = 1
+
+        current_chunk.append(step)
+        current_units += step_units
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    result = []
+    for index, chunk in enumerate(chunks):
+        chunk_title = title if index == 0 else f"{title} — CONTINUED"
+        result.append((chunk_title, chunk))
+
+    return result
+
+
+def mos_pro_prepare_page_groups(generated, max_units_per_page=9):
+    """
+    Convert generated methodology into as many professional PowerPoint pages
+    as required. Sections that are not applicable are omitted automatically.
+    """
+    raw_sections = [
+        ("PRE-WORK PREPARATION", generated.get("preparation", [])),
+        ("DELIVERY / EQUIPMENT SET-UP", generated.get("delivery_setup", [])),
+        ("RIGGING / LIFTING OPERATION", generated.get("rigging_lifting", [])),
+        ("MACHINERY MOVEMENT / SHIFTING", generated.get("machinery_movement", [])),
+        ("FINAL POSITIONING / INSTALLATION", generated.get("final_positioning", [])),
+        ("COMPLETION / HOUSEKEEPING", generated.get("completion", [])),
+    ]
+
+    active_sections = [
+        (title, steps)
+        for title, steps in raw_sections
+        if steps
+    ]
+
+    labelled_sections = []
+
+    for section_index, (title, steps) in enumerate(active_sections):
+        letter = chr(ord("A") + section_index)
+        labelled_title = f"{letter}. {title}"
+
+        labelled_sections.extend(
+            mos_pro_split_section_chunks(
+                labelled_title,
+                steps,
+                max_units=max_units_per_page,
+            )
+        )
+
+    pages = []
+    current_page = []
+    current_units = 0
+
+    for title, steps in labelled_sections:
+        section_units = 1 + sum(
+            mos_pro_estimate_step_units(step)
+            for step in steps
+        )
+
+        if current_page and current_units + section_units > max_units_per_page:
+            pages.append(current_page)
+            current_page = []
+            current_units = 0
+
+        current_page.append((title, steps))
+        current_units += section_units
+
+        if current_units >= max_units_per_page:
+            pages.append(current_page)
+            current_page = []
+            current_units = 0
+
+    if current_page:
+        pages.append(current_page)
+
+    return pages
+
+
 def mos_pro_write_work_method_page(
     shape,
     page_title,
@@ -1336,10 +1469,10 @@ def mos_pro_write_work_method_page(
     stop_work=None,
 ):
     """
-    Write ONE clean work-method page.
+    Write one professional Method Statement page.
 
-    The page contains clear section headings and short numbered steps instead
-    of compressing a long 10-18 step paragraph into one tiny textbox.
+    Detailed methodology is preserved. Additional pages are created by the
+    page builder instead of shrinking the content or forcing overly-short steps.
     """
     tf = shape.text_frame
     tf.clear()
@@ -1352,7 +1485,7 @@ def mos_pro_write_work_method_page(
     if title.runs:
         mos_pro_set_run_font(
             title.runs[0],
-            size=13.0,
+            size=12.5,
             bold=True,
         )
 
@@ -1360,9 +1493,9 @@ def mos_pro_write_work_method_page(
 
     for section_title, steps in sections:
         clean_steps = [
-            str(step).strip()
+            mos_pro_clean_generated_step(step)
             for step in (steps or [])
-            if str(step).strip()
+            if mos_pro_clean_generated_step(step)
         ]
 
         if not clean_steps:
@@ -1371,71 +1504,76 @@ def mos_pro_write_work_method_page(
         mos_pro_add_paragraph(
             tf,
             section_title,
-            size=10.8,
+            size=10.5,
             bold=True,
             color=(31, 78, 121),
-            space_before=6,
+            space_before=5,
             space_after=3,
         )
 
         for step in clean_steps:
-            # The app controls numbering so accidental AI numbering is removed.
-            clean_step = re.sub(
-                r"^\s*\d+[\.\)]\s*",
-                "",
-                step,
-            ).strip()
-
             mos_pro_add_paragraph(
                 tf,
-                f"{step_no}. {clean_step}",
-                size=9.8,
+                f"{step_no}. {step}",
+                size=9.4,
                 bold=False,
                 space_before=0,
-                space_after=4,
+                space_after=3,
             )
             step_no += 1
 
     if stop_work:
-        mos_pro_add_paragraph(
-            tf,
-            "STOP WORK",
-            size=10.8,
-            bold=True,
-            color=(192, 0, 0),
-            space_before=8,
-            space_after=2,
-        )
+        clean_stop = mos_pro_clean_generated_step(stop_work)
 
-        mos_pro_add_paragraph(
-            tf,
-            stop_work,
-            size=9.8,
-            bold=True,
-            color=(192, 0, 0),
-            space_before=0,
-            space_after=0,
-        )
+        if clean_stop:
+            mos_pro_add_paragraph(
+                tf,
+                "STOP WORK",
+                size=10.5,
+                bold=True,
+                color=(192, 0, 0),
+                space_before=7,
+                space_after=2,
+            )
+
+            mos_pro_add_paragraph(
+                tf,
+                clean_stop,
+                size=9.4,
+                bold=True,
+                color=(192, 0, 0),
+                space_before=0,
+                space_after=0,
+            )
 
     return step_no
 
 
-def mos_pro_write_work_method_two_pages(prs, slide_index, generated):
+def mos_pro_continuation_suffix(index):
+    """Return A, B, C... for continuation pages."""
+    if index <= 26:
+        return chr(ord("A") + index - 1)
+    return str(index)
+
+
+def mos_pro_write_work_method_pages(prs, slide_index, generated):
     """
-    Convert the original crowded Work Method page into TWO clean pages.
+    Write the Method Statement across as many master-format pages as required.
 
-    PAGE 1
-    - A. Preparation
-    - B. Equipment Set-Up / Rigging
-
-    PAGE 2
-    - C. Hoisting / Machinery Movement
-    - D. Final Positioning / Completion
-    - STOP WORK
-
-    The second page is a duplicate of the master page, so EWMT branding,
-    header/footer and project-information formatting remain unchanged.
+    The original PRO version forced the method into two pages. This version
+    duplicates the EWMT master Method page automatically whenever more room is
+    required, preserving branding, headers, footers and project information.
     """
+    page_groups = mos_pro_prepare_page_groups(
+        generated,
+        max_units_per_page=9,
+    )
+
+    if not page_groups:
+        raise RuntimeError(
+            "AI did not generate any Method Statement work steps."
+        )
+
     first_slide = prs.slides[slide_index]
     first_shape = mos_pro_find_work_method_shape_on_slide(first_slide)
 
@@ -1444,73 +1582,56 @@ def mos_pro_write_work_method_two_pages(prs, slide_index, generated):
             "Could not locate the existing Work Method Statement textbox."
         )
 
-    source_page_number = mos_pro_get_slide_number_text(first_slide)
+    original_page_number = mos_pro_get_slide_number_text(first_slide)
 
-    second_slide = mos_pro_duplicate_slide_after(
-        prs,
-        slide_index,
-    )
+    page_labels = []
+    next_step_number = 1
 
-    second_shape = mos_pro_find_work_method_shape_on_slide(second_slide)
+    for page_index, sections in enumerate(page_groups):
+        if page_index == 0:
+            slide = first_slide
+            shape = first_shape
+            page_title = "Work Method Statement for Lifting Operation"
+            page_label = original_page_number or str(slide_index + 1)
+        else:
+            previous_slide_index = slide_index + page_index - 1
+            slide = mos_pro_duplicate_slide_after(
+                prs,
+                previous_slide_index,
+            )
 
-    if second_shape is None:
-        raise RuntimeError(
-            "Could not locate the Work Method textbox on the continuation page."
+            shape = mos_pro_find_work_method_shape_on_slide(slide)
+
+            if shape is None:
+                raise RuntimeError(
+                    "Could not locate Work Method textbox on continuation page."
+                )
+
+            suffix = mos_pro_continuation_suffix(page_index)
+
+            if original_page_number:
+                page_label = f"{original_page_number}{suffix}"
+            else:
+                page_label = f"{slide_index + 1}{suffix}"
+
+            mos_pro_set_slide_number_text(slide, page_label)
+            page_title = "Work Method Statement for Lifting Operation — Continued"
+
+        page_labels.append(page_label)
+
+        stop_work = None
+        if page_index == len(page_groups) - 1:
+            stop_work = generated.get("stop_work", "")
+
+        next_step_number = mos_pro_write_work_method_page(
+            shape,
+            page_title,
+            sections,
+            start_number=next_step_number,
+            stop_work=stop_work,
         )
 
-    # Keep the original document numbering stable.
-    # Example: page 15 becomes 15 + 15A, while the next master page stays page 16.
-    if source_page_number:
-        mos_pro_set_slide_number_text(
-            second_slide,
-            f"{source_page_number}A",
-        )
-
-    page1_sections = [
-        (
-            "A. PREPARATION",
-            generated.get("preparation", []),
-        ),
-        (
-            "B. EQUIPMENT SET-UP / RIGGING",
-            generated.get("equipment_setup_rigging", []),
-        ),
-    ]
-
-    page2_sections = [
-        (
-            "C. HOISTING / MACHINERY MOVEMENT",
-            generated.get("lifting_movement", []),
-        ),
-        (
-            "D. FINAL POSITIONING / COMPLETION",
-            generated.get("completion", []),
-        ),
-    ]
-
-    next_step_number = mos_pro_write_work_method_page(
-        first_shape,
-        "Work Method Statement for Lifting Operation",
-        page1_sections,
-        start_number=1,
-    )
-
-    mos_pro_write_work_method_page(
-        second_shape,
-        "Work Method Statement for Lifting Operation — Continued",
-        page2_sections,
-        start_number=next_step_number,
-        stop_work=generated.get("stop_work", ""),
-    )
-
-    first_page_label = source_page_number or str(slide_index + 1)
-    second_page_label = (
-        f"{source_page_number}A"
-        if source_page_number
-        else f"{slide_index + 1}A"
-    )
-
-    return first_page_label, second_page_label
+    return page_labels
 
 
 def mos_pro_generate_work_method(
@@ -1519,60 +1640,196 @@ def mos_pro_generate_work_method(
     equipment,
     site_notes,
     operation_type,
+    environment="",
+    lifting_crew="",
 ):
     """
-    Generate a concise two-page project work method.
+    Generate a detailed, project-specific Method Statement.
 
-    The existing Method Statement vector store is still searched for relevant
-    historical methodology, but old customer/project-specific details must not
-    be copied into the new job.
+    PRO must be at least as complete and practical as the normal EWMT Word
+    Method Statement. The PowerPoint writer creates extra pages automatically,
+    so the AI is not asked to sacrifice methodology merely to fit a page.
     """
     prompt = f"""
-Prepare PROJECT-SPECIFIC work-method steps for the EWMT professional Method Statement PowerPoint.
+Prepare a PROFESSIONAL, PROJECT-SPECIFIC METHOD STATEMENT work sequence
+for Eric Wong Machinery Transportation Pte Ltd.
 
-Before generating the method, use the EWMT Method Statement vector store to study relevant previous machinery-moving and lifting cases.
+This work method will be inserted into EWMT's professional Method Statement
+PRO PowerPoint and may be submitted to a customer, main contractor,
+consultant or site management for review and approval.
 
-CURRENT JOB
-Operation type: {operation_type}
-Description of work: {description}
-Machine / load: {machine}
-Equipment actually intended: {equipment}
-Site / access notes: {site_notes}
+QUALITY STANDARD
+- The writing must be at least as complete, practical and operationally useful
+  as a full contractor Method Statement.
+- Do NOT produce abbreviated presentation bullets merely because the final
+  document is a PowerPoint.
+- The PowerPoint system will automatically create additional pages when
+  required. Do NOT omit important methodology simply to keep the answer short.
+- Use clear formal contractor wording and describe the actual sequence of work.
 
-IMPORTANT RULES
-- Use previous vector-store cases only for methodology, practical work sequence and relevant controls.
-- NEVER copy old customer names, old site names, dates, prices, crane registration numbers, worker names or machine details from previous jobs.
-- Use ONLY equipment stated for this current job.
-- Do not invent cranes, forklifts, slings, shackles, spreader beams, hydraulic jacks, machine skates or other equipment.
-- Keep each step SHORT, practical and specific.
-- Each step should normally be about 12 to 22 words.
-- Do not write paragraph-length steps.
-- Do not repeat the general WSH wording already contained in the master MOS.
-- Total work sequence should normally contain approximately 10 to 14 steps.
-- Include a site briefing / toolbox meeting before commencement.
-- Include barricading / exclusion-zone control when relevant.
-- If crane / lorry-loader lifting is actually stated, include relevant setup, load/radius/SWL verification, rigging inspection, trial lift and controlled lifting.
-- If floor shifting is involved, use only the floor-moving equipment actually stated by the user.
-- Include final positioning, de-rigging and housekeeping.
-- STOP WORK must be one short statement only.
+Before preparing the work method, use the EWMT Method Statement vector store
+to study the most relevant previous machinery-moving, lifting, transportation,
+unloading, shifting and positioning cases.
 
-Return JSON only with these exact fields:
+Use historical documents only to understand EWMT's practical methodology,
+work sequence, terminology and normal operating controls.
+
+============================================================
+CURRENT PROJECT
+============================================================
+
+Operation Type:
+{operation_type}
+
+Description of Work:
+{description}
+
+Machine / Load:
+{machine}
+
+Equipment Actually Intended for This Job:
+{equipment}
+
+Site / Access / Obstruction Information:
+{site_notes}
+
+Environment / Site Conditions:
+{environment}
+
+Lifting Crew / Responsible Personnel:
+{lifting_crew}
+
+============================================================
+CRITICAL CONTENT RULES
+============================================================
+
+1. Write the ACTUAL sequence in which the work should be carried out.
+
+2. Each step must provide enough information for a supervisor and work crew to
+   understand what is to be done and how the activity will be performed.
+
+3. Use formal professional contractor wording suitable for a Method Statement
+   submitted for approval.
+
+4. Do NOT restrict a step to an artificial word count.
+
+5. A step may contain approximately 25 to 60 words where the operation requires
+   that level of explanation. Shorter steps are acceptable for simple actions.
+
+6. There is NO fixed maximum number of work steps. The number of steps shall
+   depend on the actual complexity of the job.
+
+7. For an ordinary machinery-moving operation, approximately 12 to 24 detailed
+   work steps may be appropriate, but this is not a mandatory limit.
+
+8. Do NOT produce generic filler or repeat general safety statements without
+   explaining their relevance to the actual work step.
+
+9. Do NOT repeat general Workplace Safety & Health wording already contained
+   elsewhere in the EWMT master Method Statement.
+
+10. Safety controls may be included within a work step when directly relevant
+    to how that particular operation is carried out.
+
+11. NEVER copy old customer names, old site names, dates, prices, crane or
+    vehicle registration numbers, worker names or machine details from previous
+    jobs.
+
+12. NEVER copy pricing, quotation amounts, discounts, margins or other
+    commercial information.
+
+13. Use ONLY equipment stated for this current job.
+
+14. Do NOT invent cranes, forklifts, slings, shackles, spreader beams,
+    hydraulic jacks, machinery skates, trailers, lorries or other equipment.
+
+15. Do NOT invent exact dimensions, weights, SWLs, crane radii, capacities or
+    equipment ratings that have not been supplied.
+
+16. Where an exact value is not supplied but verification is required, state
+    that the responsible person shall verify suitability before commencement
+    rather than inventing a value.
+
+17. Include a site briefing / toolbox meeting before commencement.
+
+18. Include verification of the access route, working area, unloading point
+    and final machine position where applicable.
+
+19. Include barricading / exclusion-zone control where applicable.
+
+20. Include protection of floors, walls, doors or customer property where this
+    is indicated by the current job information.
+
+21. For crane or lorry-loader lifting, WHEN SUCH EQUIPMENT IS ACTUALLY STATED,
+    describe applicable methodology such as crane positioning, ground/setup
+    verification, outrigger deployment, load/radius/capacity verification,
+    lifting-gear inspection, rigging arrangement, centre-of-gravity awareness,
+    trial lift, controlled lifting, communication, landing and de-rigging.
+
+22. For forklift operations, WHEN A FORKLIFT IS ACTUALLY STATED, describe the
+    practical manner in which the machine/load is approached, supported,
+    controlled, transported and positioned. Do not invent a forklift capacity.
+
+23. For floor machinery shifting, use ONLY the machinery-moving equipment
+    actually stated for this project. Describe lifting, supporting, transfer,
+    steering and controlled movement as applicable.
+
+24. Where hydraulic jacks are stated, explain progressive raising and secure
+    support of the machine before the next stage of work.
+
+25. Where machinery skates are stated, explain their installation, alignment,
+    checking and controlled use for machinery movement.
+
+26. Where floor protection is stated, include installation before machinery
+    movement and removal after completion.
+
+27. Include final positioning, landing, levelling or placement according to the
+    customer's designated location where applicable.
+
+28. Include de-rigging, removal of temporary equipment, housekeeping and final
+    inspection / handover where appropriate.
+
+29. Do not include explanations about why the methodology was selected.
+
+30. Do not mention vector stores, historical documents, previous Method
+    Statements, AI or company writing style in the generated document.
+
+31. Do not write a summary or conclusion.
+
+32. Return only project work-method content.
+
+============================================================
+SECTION REQUIREMENTS
+============================================================
+
+Return these exact JSON fields:
 
 preparation
-- Array of 3 to 4 short steps.
+- Detailed pre-work preparation, briefing, verification and site-control steps.
+- Normally 3 to 6 steps, but use more when genuinely required.
 
-equipment_setup_rigging
-- Array of 2 to 4 short steps.
-- Return an empty array when this section is not applicable.
+delivery_setup
+- Delivery, access, unloading-area and crane/forklift/equipment setup steps.
+- Return [] if not applicable.
 
-lifting_movement
-- Array of 3 to 4 short steps.
+rigging_lifting
+- Rigging, trial lift and lifting methodology.
+- Return [] if there is no lifting operation.
+
+machinery_movement
+- Machinery shifting / moving / internal transportation methodology.
+- Return [] if not applicable.
+
+final_positioning
+- Final positioning, levelling, landing, installation or placement methodology.
+- Return [] if not applicable.
 
 completion
-- Array of 2 to 3 short steps.
+- De-rigging, equipment removal, housekeeping, final inspection and handover.
+- Normally 2 to 4 steps.
 
 stop_work
-- One concise STOP WORK statement.
+- One concise, project-relevant STOP WORK statement.
 """
 
     response = client.responses.create(
@@ -1585,7 +1842,7 @@ stop_work
         text={
             "format": {
                 "type": "json_schema",
-                "name": "mos_pro_clean_work_method_schema",
+                "name": "mos_pro_professional_work_method_schema",
                 "schema": {
                     "type": "object",
                     "additionalProperties": False,
@@ -1594,11 +1851,19 @@ stop_work
                             "type": "array",
                             "items": {"type": "string"},
                         },
-                        "equipment_setup_rigging": {
+                        "delivery_setup": {
                             "type": "array",
                             "items": {"type": "string"},
                         },
-                        "lifting_movement": {
+                        "rigging_lifting": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "machinery_movement": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "final_positioning": {
                             "type": "array",
                             "items": {"type": "string"},
                         },
@@ -1606,14 +1871,14 @@ stop_work
                             "type": "array",
                             "items": {"type": "string"},
                         },
-                        "stop_work": {
-                            "type": "string",
-                        },
+                        "stop_work": {"type": "string"},
                     },
                     "required": [
                         "preparation",
-                        "equipment_setup_rigging",
-                        "lifting_movement",
+                        "delivery_setup",
+                        "rigging_lifting",
+                        "machinery_movement",
+                        "final_positioning",
                         "completion",
                         "stop_work",
                     ],
@@ -1624,22 +1889,29 @@ stop_work
 
     result = json.loads(response.output_text)
 
-    # Final defensive cleanup. The structured JSON means each item is already
-    # separate, but remove unwanted "company format" commentary if it appears.
-    for key in (
+    array_fields = [
         "preparation",
-        "equipment_setup_rigging",
-        "lifting_movement",
+        "delivery_setup",
+        "rigging_lifting",
+        "machinery_movement",
+        "final_positioning",
         "completion",
-    ):
-        result[key] = [
-            clean_ms_text(step)
-            for step in result.get(key, [])
-            if clean_ms_text(step)
-        ]
+    ]
 
-    result["stop_work"] = clean_ms_text(
-        result.get("stop_work", "")
+    for field in array_fields:
+        cleaned_steps = []
+
+        for step in result.get(field, []):
+            step = clean_ms_text(step)
+            step = mos_pro_clean_generated_step(step)
+
+            if step:
+                cleaned_steps.append(step)
+
+        result[field] = cleaned_steps
+
+    result["stop_work"] = mos_pro_clean_generated_step(
+        clean_ms_text(result.get("stop_work", ""))
     )
 
     return result
@@ -1647,7 +1919,9 @@ stop_work
 
 def mos_pro_build_powerpoint(project_data, replace_work_method=False, work_method_data=None):
     if not PPTX_AVAILABLE:
-        raise RuntimeError("python-pptx is not installed. Add python-pptx to requirements.txt and redeploy Streamlit.")
+        raise RuntimeError(
+            "python-pptx is not installed. Add python-pptx to requirements.txt and redeploy Streamlit."
+        )
 
     master_path = mos_pro_find_master_template()
     if not master_path:
@@ -1665,11 +1939,13 @@ def mos_pro_build_powerpoint(project_data, replace_work_method=False, work_metho
         work_method_data = work_method_data or {}
 
         generated = mos_pro_generate_work_method(
-            work_method_data.get("description", ""),
-            work_method_data.get("machine", ""),
-            work_method_data.get("equipment", ""),
-            work_method_data.get("site_notes", ""),
-            work_method_data.get("operation_type", ""),
+            description=work_method_data.get("description", ""),
+            machine=work_method_data.get("machine", ""),
+            equipment=work_method_data.get("equipment", ""),
+            site_notes=work_method_data.get("site_notes", ""),
+            operation_type=work_method_data.get("operation_type", ""),
+            environment=work_method_data.get("environment", ""),
+            lifting_crew=work_method_data.get("lifting_crew", ""),
         )
 
         slide_index, shape = mos_pro_find_work_method_shape(prs)
@@ -1679,14 +1955,14 @@ def mos_pro_build_powerpoint(project_data, replace_work_method=False, work_metho
                 "Could not locate the existing Work Method Statement page in the master PowerPoint."
             )
 
-        first_page, continuation_page = mos_pro_write_work_method_two_pages(
+        page_labels = mos_pro_write_work_method_pages(
             prs,
             slide_index,
             generated,
         )
 
         replaced_work_method = True
-        work_method_slide = f"{first_page} / {continuation_page}"
+        work_method_slide = " / ".join(page_labels)
 
     output = BytesIO()
     prs.save(output)
@@ -2143,59 +2419,104 @@ job_scope
 # ======================================================
 if page == "📑 Method Statement PRO":
     st.markdown("## 📑 Method Statement PRO")
-    st.caption("Experimental professional MOS built from your existing EWMT PowerPoint master. The normal Word Method Statement remains untouched and continues to work separately.")
+    st.caption(
+        "Professional project-specific Method Statement built from your EWMT PowerPoint master, "
+        "historical Method Statement vector store and current job details."
+    )
 
     master_path = mos_pro_find_master_template()
 
     if not PPTX_AVAILABLE:
-        st.error("MOS PRO requires `python-pptx`. Add `python-pptx` to requirements.txt and redeploy the app.")
+        st.error(
+            "MOS PRO requires `python-pptx`. Add `python-pptx` to requirements.txt and redeploy the app."
+        )
     elif not master_path:
         st.error("MOS PRO master PowerPoint not found.")
         st.code("Templates/MOS New.pptx")
-        st.info("Upload your supplied MOS PowerPoint into the Templates folder. The code also accepts `MOS New(1).pptx`.")
+        st.info(
+            "Upload your supplied MOS PowerPoint into the Templates folder. "
+            "The code also accepts `MOS New(1).pptx`."
+        )
     else:
         try:
             preview_prs = Presentation(master_path)
-            st.success(f"Master loaded: {os.path.basename(master_path)} • {len(preview_prs.slides)} pages")
+            st.success(
+                f"Master loaded: {os.path.basename(master_path)} • {len(preview_prs.slides)} pages"
+            )
         except Exception as exc:
             st.error(f"Master template could not be opened: {exc}")
 
     st.info(
-        "SAFE DEVELOPMENT MODE: The PowerPoint master is copied first. Standard MOS wording, flowcharts, pictures, lifting pages and emergency procedure remain in place. "
-        "V1 only updates the repeated project-information block. The optional Work Method replacement is OFF by default."
+        "PRO MODE: The EWMT master PowerPoint is copied first. Standard company wording, "
+        "flowcharts, pictures, lifting pages and emergency procedures remain intact. "
+        "The project Work Method page is replaced with a detailed AI-generated methodology, "
+        "and additional continuation pages are created automatically when more space is required."
     )
 
-    with st.expander("1. Project Information — updates throughout the PowerPoint", expanded=True):
+    with st.expander(
+        "1. Project Information — updates throughout the PowerPoint",
+        expanded=True,
+    ):
         c1, c2 = st.columns(2)
+
         with c1:
-            pro_customer = st.text_input("Customer / Tenant Company", key="mospro_customer")
-            pro_location = st.text_input("Site Location", key="mospro_location")
+            pro_customer = st.text_input(
+                "Customer / Tenant Company",
+                key="mospro_customer",
+            )
+            pro_location = st.text_input(
+                "Site Location",
+                key="mospro_location",
+            )
             pro_process = st.text_input(
                 "Process",
                 value="Lifting and Moving of Machinery",
-                key="mospro_process"
+                key="mospro_process",
             )
-            pro_prepared = st.text_input("Prepared By", value="Kevin Wong", key="mospro_prepared")
+            pro_prepared = st.text_input(
+                "Prepared By",
+                value="Kevin Wong",
+                key="mospro_prepared",
+            )
+
         with c2:
-            pro_approved = st.text_input("Approved By", value="Eric Wong (Director)", key="mospro_approved")
-            pro_last_review = st.date_input("Last Review Date", value=date.today(), format="DD/MM/YYYY", key="mospro_last_review")
-            pro_next_review = st.date_input("Next Review Date", value=date.today() + timedelta(days=365), format="DD/MM/YYYY", key="mospro_next_review")
+            pro_approved = st.text_input(
+                "Approved By",
+                value="Eric Wong (Director)",
+                key="mospro_approved",
+            )
+            pro_last_review = st.date_input(
+                "Last Review Date",
+                value=date.today(),
+                format="DD/MM/YYYY",
+                key="mospro_last_review",
+            )
+            pro_next_review = st.date_input(
+                "Next Review Date",
+                value=date.today() + timedelta(days=365),
+                format="DD/MM/YYYY",
+                key="mospro_next_review",
+            )
 
         st.caption(
-            "These values replace the old customer/site/process/review information in the repeated header table on the master pages. "
-            "The MOS standard wording itself is not rewritten."
+            "These values update the repeated customer/site/process/review information "
+            "in the EWMT master while preserving the standard company pages."
         )
 
-    with st.expander("2. Optional Project-Specific Work Method — EXPERIMENTAL", expanded=False):
+    with st.expander(
+        "2. Professional Project-Specific Work Method",
+        expanded=True,
+    ):
         replace_pro_work_method = st.checkbox(
-            "Replace the existing Work Method Statement page with AI-generated project steps",
-            value=False,
-            key="mospro_replace_work_method"
+            "Generate Project-Specific Work Method",
+            value=True,
+            key="mospro_replace_work_method",
         )
 
-        st.warning(
-            "Leave this OFF while you are first testing the master-template system. "
-            "When ON, only the existing 'Work Method Statement for Lifting Operation' textbox is replaced."
+        st.info(
+            "MOS PRO uses the same EWMT Method Statement vector store as the normal Method Statement, "
+            "but it is instructed to write a fuller project methodology. It is not limited to 10–14 "
+            "short steps; extra PowerPoint pages are created automatically when required."
         )
 
         pro_operation_type = st.selectbox(
@@ -2208,27 +2529,87 @@ if page == "📑 Method Statement PRO":
                 "Loading / Unloading Only",
                 "Custom / Other",
             ],
-            key="mospro_operation_type"
-        )
-        pro_description = st.text_area("Description of Work", height=100, key="mospro_description")
-        pro_machine = st.text_input("Machine / Load — model, dimensions and weight", key="mospro_machine")
-        pro_equipment = st.text_area(
-            "Equipment Actually Intended for this Job",
-            height=90,
-            placeholder="Example: 50T mobile crane, 10T forklift, hydraulic jacks, machine skates, 4 x 5T webbing slings",
-            key="mospro_equipment"
-        )
-        pro_site_notes = st.text_area(
-            "Special Site / Access Notes",
-            height=90,
-            placeholder="Only enter job-specific information. Standard EWMT safety wording already exists in the master MOS.",
-            key="mospro_site_notes"
+            key="mospro_operation_type",
         )
 
-    with st.expander("3. Master File Protection / Current V1 Scope", expanded=False):
+        pro_description = st.text_area(
+            "Description of Work",
+            height=130,
+            placeholder=(
+                "Example: Supply necessary manpower, mobile crane, forklift and machinery moving "
+                "equipment to unload, shift and position one machining centre from low-bed trailer "
+                "into the customer's production area."
+            ),
+            key="mospro_description",
+        )
+
+        pro_machine = st.text_area(
+            "Machine / Load Details — model, dimensions and weight",
+            height=100,
+            placeholder=(
+                "Example: Mazak Variaxis i700T, approximately 12,000 kg, overall dimensions ..."
+            ),
+            key="mospro_machine",
+        )
+
+        pro_equipment = st.text_area(
+            "Equipment Actually Intended for this Job",
+            height=130,
+            placeholder=(
+                "Example:\n"
+                "50T mobile crane\n"
+                "10T forklift\n"
+                "Hydraulic jacks\n"
+                "Machinery skates\n"
+                "4 x 20T round slings\n"
+                "4 x 12T shackles\n"
+                "Floor protection"
+            ),
+            key="mospro_equipment",
+        )
+
+        pro_site_notes = st.text_area(
+            "Site Access / Obstacles / Special Requirements",
+            height=130,
+            placeholder=(
+                "Example:\n"
+                "Machine delivered by low-bed trailer.\n"
+                "Epoxy flooring to be protected.\n"
+                "Restricted doorway along travel route.\n"
+                "Barricade unloading and machinery movement area.\n"
+                "Final position according to customer marking."
+            ),
+            key="mospro_site_notes",
+        )
+
+        pro_environment = st.text_area(
+            "Environment / Site Conditions",
+            height=100,
+            value=(
+                "No operation will be carried out during heavy rain, thunderstorms or lightning "
+                "where the work is exposed to weather. Work area and machinery travel route shall "
+                "be maintained in a safe and orderly condition."
+            ),
+            key="mospro_environment",
+        )
+
+        pro_lifting_crew = st.text_area(
+            "Lifting Crew / Responsible Personnel",
+            height=100,
+            value=(
+                "MOM certified lifting supervisor, rigger, signalman and crane / lorry loader "
+                "operator shall be involved where applicable to the lifting operation."
+            ),
+            key="mospro_lifting_crew",
+        )
+
+    with st.expander(
+        "3. Master File Protection / PRO Scope",
+        expanded=False,
+    ):
         st.markdown(
             """
-**What V1 changes**
+**What PRO changes**
 - Customer / Tenant Company
 - Site Location
 - Process
@@ -2236,9 +2617,10 @@ if page == "📑 Method Statement PRO":
 - Approved By
 - Last Review Date
 - Next Review Date
-- Optional: existing project Work Method page only
+- Project-specific Work Method Statement
+- Automatic continuation pages when the detailed method requires more space
 
-**What V1 does NOT change**
+**What PRO preserves**
 - EWMT company header / logo
 - Workplace Safety & Health standard pages
 - Objectives / Scope / Responsibilities
@@ -2248,7 +2630,9 @@ if page == "📑 Method Statement PRO":
 - Existing drawings, certificates, lifting-plan pages and pictures
 - Emergency procedure page
 
-This keeps the PRO version safe to develop slowly while the current Word Method Statement continues operating independently.
+Historical Method Statements are used only as methodology references. Old customer names,
+site details, personnel, registration numbers, machine data and commercial pricing are not
+to be copied into the new project.
             """
         )
 
@@ -2256,7 +2640,7 @@ This keeps the PRO version safe to develop slowly while the current Word Method 
         "📑 Generate MOS PRO PowerPoint",
         key="generate_mos_pro",
         type="primary",
-        use_container_width=True
+        use_container_width=True,
     )
 
     if generate_mos_pro:
@@ -2267,15 +2651,24 @@ This keeps the PRO version safe to develop slowly while the current Word Method 
             "Prepared By": pro_prepared,
             "Approved By": pro_approved,
         }
-        missing = [label for label, value in required.items() if not str(value).strip()]
+
+        missing = [
+            label
+            for label, value in required.items()
+            if not str(value).strip()
+        ]
 
         if missing:
             st.error("Please complete: " + ", ".join(missing))
         elif replace_pro_work_method and not pro_description.strip():
-            st.error("Please enter Description of Work before replacing the Work Method page.")
+            st.error(
+                "Please enter Description of Work before generating the project-specific Work Method."
+            )
         else:
             try:
-                with st.spinner("Copying EWMT master PowerPoint and applying project information..."):
+                with st.spinner(
+                    "Preparing professional project Method Statement and applying it to the EWMT master..."
+                ):
                     project_data = {
                         "customer": pro_customer,
                         "location": pro_location,
@@ -2285,12 +2678,15 @@ This keeps the PRO version safe to develop slowly while the current Word Method 
                         "last_review": format_date_ddmmyyyy(pro_last_review),
                         "next_review": format_date_ddmmyyyy(pro_next_review),
                     }
+
                     work_method_data = {
                         "operation_type": pro_operation_type,
                         "description": pro_description,
                         "machine": pro_machine,
                         "equipment": pro_equipment,
                         "site_notes": pro_site_notes,
+                        "environment": pro_environment,
+                        "lifting_crew": pro_lifting_crew,
                     }
 
                     pro_buffer, pro_info = mos_pro_build_powerpoint(
@@ -2301,15 +2697,26 @@ This keeps the PRO version safe to develop slowly while the current Word Method 
 
                 st.success(
                     f"MOS PRO generated from `{pro_info['master']}`. "
-                    f"{pro_info['slides']} pages preserved; {pro_info['changed_fields']} project-information text blocks updated."
+                    f"Final document: {pro_info['slides']} pages; "
+                    f"{pro_info['changed_fields']} project-information text blocks updated."
                 )
 
                 if pro_info.get("work_method_replaced"):
-                    st.info(f"Experimental Work Method replacement applied on page {pro_info.get('work_method_slide')}.")
+                    st.info(
+                        "Professional Work Method generated on page(s): "
+                        f"{pro_info.get('work_method_slide')}"
+                    )
                 else:
-                    st.info("Standard master contents were preserved. Work Method replacement was not enabled.")
+                    st.info(
+                        "Standard master contents were preserved. Project-specific Work Method generation was not enabled."
+                    )
 
-                safe_customer = re.sub(r"[^A-Za-z0-9_-]+", "_", pro_customer.strip())[:45] or "Project"
+                safe_customer = re.sub(
+                    r"[^A-Za-z0-9_-]+",
+                    "_",
+                    pro_customer.strip(),
+                )[:45] or "Project"
+
                 st.download_button(
                     "⬇️ Download MOS PRO (.pptx)",
                     pro_buffer,
